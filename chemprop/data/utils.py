@@ -12,12 +12,11 @@ from tqdm import tqdm
 
 from .data import ComputeGraphDatapoint, ComputeGraphDataset, make_graphs
 from chemprop.args import PredictArgs, TrainArgs
-from chemprop.features import load_features, load_valid_atom_or_bond_features
+from chemprop.features import load_features, load_valid_node_or_edge_features
 
 def get_header(path: str) -> List[str]:
     """
     Returns the header of a data CSV file.
-
     :param path: Path to a CSV file.
     :return: A list of strings containing the strings in the comma-separated header.
     """
@@ -33,7 +32,6 @@ def preprocess_smiles_columns(path: str,
     """
     Preprocesses the :code:`smiles_columns` variable to ensure that it is a list of column
     headings corresponding to the columns in the data file holding SMILES. Assumes file has a header.
-
     :param path: Path to a CSV file.
     :param smiles_columns: The names of the columns containing SMILES.
                            By default, uses the first :code:`number_of_molecules` columns.
@@ -67,12 +65,10 @@ def get_task_names(path: str,
                    ignore_columns: List[str] = None) -> List[str]:
     """
     Gets the task names from a data CSV file.
-
     If :code:`target_columns` is provided, returns `target_columns`.
     Otherwise, returns all columns except the :code:`smiles_columns`
     (or the first column, if the :code:`smiles_columns` is None) and
     the :code:`ignore_columns`.
-
     :param path: Path to a CSV file.
     :param smiles_columns: The names of the columns containing SMILES.
                            By default, uses the first :code:`number_of_molecules` columns.
@@ -99,7 +95,6 @@ def get_task_names(path: str,
 def get_data_weights(path: str) -> List[float]:
     """
     Returns the list of data weights for the loss function as stored in a CSV file.
-
     :param path: Path to a CSV file.
     :return: A list of floats containing the data weights.
     """
@@ -125,7 +120,6 @@ def get_smiles(path: str,
                ) -> Union[List[str], List[List[str]]]:
     """
     Returns the SMILES from a data CSV file.
-
     :param path: Path to a CSV file.
     :param smiles_columns: A list of the names of the columns containing SMILES.
                            By default, uses the first :code:`number_of_molecules` columns.
@@ -165,8 +159,8 @@ def get_data(path: str,
              features_path: List[str] = None,
              features_generator: List[str] = None,
              phase_features_path: str = None,
-             atom_descriptors_path: str = None,
-             bond_features_path: str = None,
+             node_descriptors_path: str = None,
+             edge_features_path: str = None,
              max_data_size: int = None,
              store_row: bool = False,
              logger: Logger = None,
@@ -174,7 +168,6 @@ def get_data(path: str,
              skip_none_targets: bool = False) -> ComputeGraphDataset:
     """
     Gets SMILES and target values from a CSV file.
-
     :param path: Path to a CSV file.
     :param smiles_columns: The names of the columns containing SMILES.
                            By default, uses the first :code:`number_of_molecules` columns.
@@ -189,15 +182,15 @@ def get_data(path: str,
     :param features_generator: A list of features generators to use. If provided, it is used
                                in place of :code:`args.features_generator`.
     :param phase_features_path: A path to a file containing phase features as applicable to spectra.
-    :param atom_descriptors_path: The path to the file containing the custom atom descriptors.
-    :param bond_features_path: The path to the file containing the custom bond features.
+    :param node_descriptors_path: The path to the file containing the custom node descriptors.
+    :param edge_features_path: The path to the file containing the custom edge features.
     :param max_data_size: The maximum number of data points to load.
     :param logger: A logger for recording output.
-    :param store_row: Whether to store the raw CSV row in each :class:`~chemprop.data.data.MoleculeDatapoint`.
+    :param store_row: Whether to store the raw CSV row in each :class:`~chemprop.data.data.ComputeGraphDatapoint`.
     :param skip_none_targets: Whether to skip targets that are all 'None'. This is mostly relevant when --target_columns
                               are passed in, so only a subset of tasks are examined.
     :param loss_function: The loss function to be used in training.
-    :return: A :class:`~chemprop.data.MoleculeDataset` containing SMILES and target values along
+    :return: A :class:`~chemprop.data.ComputeGraphDataset` containing SMILES and target values along
              with other info such as additional features when desired.
     """
     debug = logger.debug if logger is not None else print
@@ -210,10 +203,10 @@ def get_data(path: str,
         features_path = features_path if features_path is not None else args.features_path
         features_generator = features_generator if features_generator is not None else args.features_generator
         phase_features_path = phase_features_path if phase_features_path is not None else args.phase_features_path
-        atom_descriptors_path = atom_descriptors_path if atom_descriptors_path is not None \
-            else args.atom_descriptors_path
-        bond_features_path = bond_features_path if bond_features_path is not None \
-            else args.bond_features_path
+        node_descriptors_path = node_descriptors_path if node_descriptors_path is not None \
+            else args.node_descriptors_path
+        edge_features_path = edge_features_path if edge_features_path is not None \
+            else args.edge_features_path
         max_data_size = max_data_size if max_data_size is not None else args.max_data_size
         loss_function = loss_function if loss_function is not None else args.loss_function
 
@@ -318,28 +311,28 @@ def get_data(path: str,
             if len(all_smiles) >= max_data_size:
                 break
 
-        atom_features = None
-        atom_descriptors = None
-        if args is not None and args.atom_descriptors is not None:
+        node_features = None
+        node_descriptors = None
+        if args is not None and args.node_descriptors is not None:
             try:
-                descriptors = load_valid_atom_or_bond_features(atom_descriptors_path, [x[0] for x in all_smiles])
+                descriptors = load_valid_node_or_edge_features(node_descriptors_path, [x[0] for x in all_smiles])
             except Exception as e:
-                raise ValueError(f'Failed to load or validate custom atomic descriptors or features: {e}')
+                raise ValueError(f'Failed to load or validate custom nodeic descriptors or features: {e}')
 
-            if args.atom_descriptors == 'feature':
-                atom_features = descriptors
-            elif args.atom_descriptors == 'descriptor':
-                atom_descriptors = descriptors
+            if args.node_descriptors == 'feature':
+                node_features = descriptors
+            elif args.node_descriptors == 'descriptor':
+                node_descriptors = descriptors
 
-        bond_features = None
-        if args is not None and args.bond_features_path is not None:
+        edge_features = None
+        if args is not None and args.edge_features_path is not None:
             try:
-                bond_features = load_valid_atom_or_bond_features(bond_features_path, [x[0] for x in all_smiles])
+                edge_features = load_valid_node_or_edge_features(edge_features_path, [x[0] for x in all_smiles])
             except Exception as e:
-                raise ValueError(f'Failed to load or validate custom bond features: {e}')
+                raise ValueError(f'Failed to load or validate custom edge features: {e}')
 
-        data = MoleculeDataset([
-            MoleculeDatapoint(
+        data = ComputeGraphDataset([
+            ComputeGraphDatapoint(
                 smiles=smiles,
                 targets=targets,
                 row=all_rows[i] if store_row else None,
@@ -349,11 +342,11 @@ def get_data(path: str,
                 features_generator=features_generator,
                 features=all_features[i] if features_data is not None else None,
                 phase_features=all_phase_features[i] if phase_features is not None else None,
-                atom_features=atom_features[i] if atom_features is not None else None,
-                atom_descriptors=atom_descriptors[i] if atom_descriptors is not None else None,
-                bond_features=bond_features[i] if bond_features is not None else None,
-                overwrite_default_atom_features=args.overwrite_default_atom_features if args is not None else False,
-                overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False
+                node_features=node_features[i] if node_features is not None else None,
+                node_descriptors=node_descriptors[i] if node_descriptors is not None else None,
+                edge_features=edge_features[i] if edge_features is not None else None,
+                overwrite_default_node_features=args.overwrite_default_node_features if args is not None else False,
+                overwrite_default_edge_features=args.overwrite_default_edge_features if args is not None else False
             ) for i, (smiles, targets) in tqdm(enumerate(zip(all_smiles, all_targets)),
                                                total=len(all_smiles))
         ])
@@ -374,18 +367,17 @@ def get_data_from_smiles(smiles: List[List[str]],
                          logger: Logger = None,
                          features_generator: List[str] = None) -> ComputeGraphDataset:
     """
-    Converts a list of SMILES to a :class:`~chemprop.data.MoleculeDataset`.
-
+    Converts a list of SMILES to a :class:`~chemprop.data.ComputeGraphDataset`.
     :param smiles: A list of lists of SMILES with length depending on the number of molecules.
     :param skip_invalid_smiles: Whether to skip and filter out invalid smiles using :func:`filter_invalid_smiles`
     :param logger: A logger for recording output.
     :param features_generator: List of features generators.
-    :return: A :class:`~chemprop.data.MoleculeDataset` with all of the provided SMILES.
+    :return: A :class:`~chemprop.data.ComputeGraphDataset` with all of the provided SMILES.
     """
     debug = logger.debug if logger is not None else print
 
-    data = MoleculeDataset([
-        MoleculeDatapoint(
+    data = ComputeGraphDataset([
+        ComputeGraphDatapoint(
             smiles=smile,
             row=OrderedDict({'smiles': smile}),
             features_generator=features_generator
@@ -405,7 +397,6 @@ def get_data_from_smiles(smiles: List[List[str]],
 
 def get_inequality_targets(path: str, target_columns: List[str] = None) -> List[str]:
     """
-
     """
     gt_targets = []
     lt_targets = []
@@ -434,8 +425,7 @@ def split_data(data: ComputeGraphDataset,
                                                ComputeGraphDataset]:
     r"""
     Splits data into training, validation, and test splits.
-
-    :param data: A :class:`~chemprop.data.MoleculeDataset`.
+    :param data: A :class:`~chemprop.data.ComputeGraphDataset`.
     :param split_type: Split type.
     :param sizes: A length-3 tuple with the proportions of data in the train, validation, and test sets.
     :param key_molecule_index: For data with multiple molecules, this sets which molecule will be considered during splitting.
@@ -443,7 +433,7 @@ def split_data(data: ComputeGraphDataset,
     :param num_folds: Number of folds to create (only needed for "cv" split type).
     :param args: A :class:`~chemprop.args.TrainArgs` object.
     :param logger: A logger for recording output.
-    :return: A tuple of :class:`~chemprop.data.MoleculeDataset`\ s containing the train,
+    :return: A tuple of :class:`~chemprop.data.ComputeGraphDataset`\ s containing the train,
              validation, and test splits of the data.
     """
     if not (len(sizes) == 3 and np.isclose(sum(sizes), 1)):
@@ -469,7 +459,7 @@ def split_data(data: ComputeGraphDataset,
                     split_indices.extend(pickle.load(rf))
             data_split.append([data[i] for i in split_indices])
         train, val, test = tuple(data_split)
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     elif split_type in {'cv', 'cv-no-test'}:
         if num_folds <= 1 or num_folds > len(data):
@@ -491,7 +481,7 @@ def split_data(data: ComputeGraphDataset,
             else:
                 train.append(d)
 
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     elif split_type == 'index_predetermined':
         split_indices = args.crossval_index_sets[args.seed]
@@ -503,7 +493,7 @@ def split_data(data: ComputeGraphDataset,
         for split in range(3):
             data_split.append([data[i] for i in split_indices[split]])
         train, val, test = tuple(data_split)
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     elif split_type == 'predetermined':
         if not val_fold_index and sizes[2] != 0:
@@ -541,7 +531,7 @@ def split_data(data: ComputeGraphDataset,
             train = train_val[:train_size]
             val = train_val[train_size:]
 
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     elif split_type == 'random_with_repeated_smiles': # Use to constrain data with the same smiles go in the same split.
         smiles_dict=defaultdict(set)
@@ -564,7 +554,7 @@ def split_data(data: ComputeGraphDataset,
         val = [data[i] for i in val]
         test = [data[i] for i in test]
 
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     elif split_type == 'random':
         indices = list(range(len(data)))
@@ -577,7 +567,7 @@ def split_data(data: ComputeGraphDataset,
         val = [data[i] for i in indices[train_size:train_val_size]]
         test = [data[i] for i in indices[train_val_size:]]
 
-        return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
+        return ComputeGraphDataset(train), ComputeGraphDataset(val), ComputeGraphDataset(test)
 
     else:
         raise ValueError(f'split_type "{split_type}" not supported.')
@@ -586,8 +576,7 @@ def split_data(data: ComputeGraphDataset,
 def get_class_sizes(data: ComputeGraphDataset, proportion: bool = True) -> List[List[float]]:
     """
     Determines the proportions of the different classes in a classification dataset.
-
-    :param data: A classification :class:`~chemprop.data.MoleculeDataset`.
+    :param data: A classification :class:`~chemprop.data.ComputeGraphDataset`.
     :param proportion: Choice of whether to return proportions for class size or counts.
     :return: A list of lists of class proportions. Each inner list contains the class proportions for a task.
     """
@@ -622,8 +611,7 @@ def get_class_sizes(data: ComputeGraphDataset, proportion: bool = True) -> List[
 def validate_dataset_type(data: ComputeGraphDataset, dataset_type: str) -> None:
     """
     Validates the dataset type to ensure the data matches the provided type.
-
-    :param data: A :class:`~chemprop.data.MoleculeDataset`.
+    :param data: A :class:`~chemprop.data.ComputeGraphDataset`.
     :param dataset_type: The dataset type to check.
     """
     target_set = {target for targets in data.targets() for target in targets} - {None}
@@ -640,7 +628,6 @@ def validate_dataset_type(data: ComputeGraphDataset, dataset_type: str) -> None:
 def validate_data(data_path: str) -> Set[str]:
     """
     Validates a data CSV file, returning a set of errors.
-
     :param data_path: Path to a data CSV file.
     :return: A set of error messages.
     """
@@ -695,3 +682,4 @@ def validate_data(data_path: str) -> Set[str]:
             errors.add('Found a target which is not a number.')
 
     return errors
+

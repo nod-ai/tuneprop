@@ -2,7 +2,7 @@ from .features_generators import get_available_features_generators, get_features
     morgan_binary_features_generator, morgan_counts_features_generator, rdkit_2d_features_generator, \
     rdkit_2d_normalized_features_generator, register_features_generator
 from .featurization import reset_featurization_parameters, get_node_fdim, get_edge_fdim, onek_encoding_unk, log_shape, node_features, edge_features, ComputeGraph, BatchComputeGraph, graphs2batch
-from .utils import load_features, save_features, load_valid_atom_or_bond_features
+from .utils import load_features, save_features, load_valid_node_or_edge_features
 
 __all__ = [
     'get_available_features_generators',
@@ -30,6 +30,6 @@ __all__ = [
     'onek_encoding_unk',
     'load_features',
     'save_features',
-    'load_valid_atom_or_bond_features',
+    'load_valid_node_or_edge_features',
     'reset_featurization_parameters'
 ]
