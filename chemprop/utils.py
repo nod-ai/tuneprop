@@ -19,18 +19,16 @@ from tqdm import tqdm
 from scipy.stats.mstats import gmean
 
 from chemprop.args import PredictArgs, TrainArgs, FingerprintArgs
-from chemprop.data import StandardScaler, MoleculeDataset, preprocess_smiles_columns, get_task_names
-from chemprop.models import MoleculeModel
+from chemprop.data import StandardScaler, ComputeGraphDataset, preprocess_smiles_columns, get_task_names
+from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import NoamLR
 
 
 def makedirs(path: str, isfile: bool = False) -> None:
     """
     Creates a directory given a path to either a directory or file.
-
     If a directory is provided, creates that directory. If a file is provided (i.e. :code:`isfile == True`),
     creates the parent directory for that file.
-
     :param path: Path to a directory or file.
     :param isfile: Whether the provided path is a directory or file.
     """
@@ -42,7 +40,7 @@ def makedirs(path: str, isfile: bool = False) -> None:
 
 def save_checkpoint(
     path: str,
-    model: MoleculeModel,
+    model: ComputeGraphModel,
     scaler: StandardScaler = None,
     features_scaler: StandardScaler = None,
     atom_descriptor_scaler: StandardScaler = None,
@@ -51,8 +49,7 @@ def save_checkpoint(
 ) -> None:
     """
     Saves a model checkpoint.
-
-    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
+    :param model: A :class:`~chemprop.models.model.ComputeGraphModel`.
     :param scaler: A :class:`~chemprop.data.scaler.StandardScaler` fitted on the data.
     :param features_scaler: A :class:`~chemprop.data.scaler.StandardScaler` fitted on the features.
     :param atom_descriptor_scaler: A :class:`~chemprop.data.scaler.StandardScaler` fitted on the atom descriptors.
@@ -88,14 +85,13 @@ def save_checkpoint(
 
 def load_checkpoint(
     path: str, device: torch.device = None, logger: logging.Logger = None
-) -> MoleculeModel:
+) -> ComputeGraphModel:
     """
     Loads a model checkpoint.
-
     :param path: Path where checkpoint is saved.
     :param device: Device where the model will be moved.
     :param logger: A logger for recording output.
-    :return: The loaded :class:`~chemprop.models.model.MoleculeModel`.
+    :return: The loaded :class:`~chemprop.models.model.ComputeGraphModel`.
     """
     if logger is not None:
         debug, info = logger.debug, logger.info
@@ -112,7 +108,7 @@ def load_checkpoint(
         args.device = device
 
     # Build model
-    model = MoleculeModel(args)
+    model = ComputeGraphModel(args)
     model_state_dict = model.state_dict()
 
     # Skip missing parameters and parameters of mismatched size
@@ -191,14 +187,14 @@ def load_frzn_model(
     current_args: Namespace = None,
     cuda: bool = None,
     logger: logging.Logger = None,
-) -> MoleculeModel:
+) -> ComputeGraphModel:
     """
     Loads a model checkpoint.
     :param path: Path where checkpoint is saved.
     :param current_args: The current arguments. Replaces the arguments loaded from the checkpoint if provided.
     :param cuda: Whether to move model to cuda.
     :param logger: A logger.
-    :return: The loaded MoleculeModel.
+    :return: The loaded ComputeGraphModel.
     """
     debug = logger.debug if logger is not None else print
 
@@ -370,7 +366,6 @@ def load_scalers(
 ) -> Tuple[StandardScaler, StandardScaler, StandardScaler, StandardScaler]:
     """
     Loads the scalers a model was trained with.
-
     :param path: Path where model checkpoint is saved.
     :return: A tuple with the data :class:`~chemprop.data.scaler.StandardScaler`
              and features :class:`~chemprop.data.scaler.StandardScaler`.
@@ -413,7 +408,6 @@ def load_scalers(
 def load_args(path: str) -> TrainArgs:
     """
     Loads the arguments a model was trained with.
-
     :param path: Path where model checkpoint is saved.
     :return: The :class:`~chemprop.args.TrainArgs` object that the model was trained with.
     """
@@ -429,7 +423,6 @@ def load_args(path: str) -> TrainArgs:
 def load_task_names(path: str) -> List[str]:
     """
     Loads the task names a model was trained with.
-
     :param path: Path where model checkpoint is saved.
     :return: A list of the task names that the model was trained with.
     """
@@ -439,7 +432,6 @@ def load_task_names(path: str) -> List[str]:
 def build_optimizer(model: nn.Module, args: TrainArgs) -> Optimizer:
     """
     Builds a PyTorch Optimizer.
-
     :param model: The model to optimize.
     :param args: A :class:`~chemprop.args.TrainArgs` object containing optimizer arguments.
     :return: An initialized Optimizer.
@@ -454,7 +446,6 @@ def build_lr_scheduler(
 ) -> _LRScheduler:
     """
     Builds a PyTorch learning rate scheduler.
-
     :param optimizer: The Optimizer whose learning rate will be scheduled.
     :param args: A :class:`~chemprop.args.TrainArgs` object containing learning rate arguments.
     :param total_epochs: The total number of epochs for which the model will be run.
@@ -475,13 +466,10 @@ def build_lr_scheduler(
 def create_logger(name: str, save_dir: str = None, quiet: bool = False) -> logging.Logger:
     """
     Creates a logger with a stream handler and two file handlers.
-
     If a logger with that name already exists, simply returns that logger.
     Otherwise, creates a new logger with a stream handler and two file handlers.
-
     The stream handler prints to the screen depending on the value of :code:`quiet`.
     One file handler (:code:`verbose.log`) saves all logs, the other (:code:`quiet.log`) only saves important info.
-
     :param name: The name of the logger.
     :param save_dir: The directory in which to save the logs.
     :param quiet: Whether the stream handler should be quiet (i.e., print only important info).
@@ -521,7 +509,6 @@ def create_logger(name: str, save_dir: str = None, quiet: bool = False) -> loggi
 def timeit(logger_name: str = None) -> Callable[[Callable], Callable]:
     """
     Creates a decorator which wraps a function with a timer that prints the elapsed time.
-
     :param logger_name: The name of the logger used to record output. If None, uses :code:`print` instead.
     :return: A decorator which wraps a function with a timer that prints the elapsed time.
     """
@@ -529,7 +516,6 @@ def timeit(logger_name: str = None) -> Callable[[Callable], Callable]:
     def timeit_decorator(func: Callable) -> Callable:
         """
         A decorator which wraps a function with a timer that prints the elapsed time.
-
         :param func: The function to wrap with the timer.
         :return: The function wrapped with the timer.
         """
@@ -554,9 +540,9 @@ def save_smiles_splits(
     save_dir: str,
     task_names: List[str] = None,
     features_path: List[str] = None,
-    train_data: MoleculeDataset = None,
-    val_data: MoleculeDataset = None,
-    test_data: MoleculeDataset = None,
+    train_data: ComputeGraphDataset = None,
+    val_data: ComputeGraphDataset = None,
+    test_data: ComputeGraphDataset = None,
     logger: logging.Logger = None,
     smiles_columns: List[str] = None,
 ) -> None:
@@ -564,15 +550,14 @@ def save_smiles_splits(
     Saves a csv file with train/val/test splits of target data and additional features.
     Also saves indices of train/val/test split as a pickle file. Pickle file does not support repeated entries
     with the same SMILES or entries entered from a path other than the main data path, such as a separate test path.
-
     :param data_path: Path to data CSV file.
     :param save_dir: Path where pickle files will be saved.
     :param task_names: List of target names for the model as from the function get_task_names().
         If not provided, will use datafile header entries.
     :param features_path: List of path(s) to files with additional molecule features.
-    :param train_data: Train :class:`~chemprop.data.data.MoleculeDataset`.
-    :param val_data: Validation :class:`~chemprop.data.data.MoleculeDataset`.
-    :param test_data: Test :class:`~chemprop.data.data.MoleculeDataset`.
+    :param train_data: Train :class:`~chemprop.data.data.ComputeGraphDataset`.
+    :param val_data: Validation :class:`~chemprop.data.data.ComputeGraphDataset`.
+    :param test_data: Test :class:`~chemprop.data.data.ComputeGraphDataset`.
     :param smiles_columns: The name of the column containing SMILES. By default, uses the first column.
     :param logger: A logger for recording output.
     """
@@ -677,10 +662,8 @@ def update_prediction_args(
     """
     Updates prediction arguments with training arguments loaded from a checkpoint file.
     If an argument is present in both, the prediction argument will be used.
-
     Also raises errors for situations where the prediction arguments and training arguments
     are different but must match for proper function.
-
     :param predict_args: The :class:`~chemprop.args.PredictArgs` object containing the arguments to use for making predictions.
     :param train_args: The :class:`~chemprop.args.TrainArgs` object containing the arguments used to train the model previously.
     :param missing_to_defaults: Whether to replace missing training arguments with the current defaults for :class: `~chemprop.args.TrainArgs`.
@@ -784,7 +767,6 @@ def multitask_mean(
     a geometric mean is used, otherwise a more typical arithmetic mean
     is used. This prevents a task with a larger magnitude from dominating
     over one with a smaller magnitude (e.g., temperature and pressure).
-
     :param scores: The scores from different tasks for a single metric.
     :param metric: The metric used to generate the scores.
     :axis: The axis along which to take the mean.

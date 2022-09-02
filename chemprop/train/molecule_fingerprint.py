@@ -6,17 +6,16 @@ import numpy as np
 from tqdm import tqdm
 
 from chemprop.args import FingerprintArgs, TrainArgs
-from chemprop.data import get_data, get_data_from_smiles, MoleculeDataLoader, MoleculeDataset
+from chemprop.data import get_data, ComputeGraphDataLoader, ComputeGraphDataset
 from chemprop.utils import load_args, load_checkpoint, makedirs, timeit, load_scalers, update_prediction_args
-from chemprop.data import MoleculeDataLoader, MoleculeDataset
-from chemprop.features import set_reaction, set_explicit_h, set_adding_hs, reset_featurization_parameters, set_extra_atom_fdim, set_extra_bond_fdim
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataLoader, ComputeGraphDataset
+from chemprop.features import reset_featurization_parameters
+from chemprop.models import ComputeGraphModel
 
 @timeit()
-def molecule_fingerprint(args: FingerprintArgs, smiles: List[List[str]] = None) -> List[List[Optional[float]]]:
+def molecule_fingerprint(args: FingerprintArgs) -> List[List[Optional[float]]]:
     """
     Loads data and a trained model and uses the model to encode fingerprint vectors for the data.
-
     :param args: A :class:`~chemprop.args.PredictArgs` object containing arguments for
                  loading data and a model and making predictions.
     :param smiles: List of list of SMILES to make predictions on.
@@ -36,28 +35,9 @@ def molecule_fingerprint(args: FingerprintArgs, smiles: List[List[str]] = None) 
 
     #set explicit H option and reaction option
     reset_featurization_parameters()
-    if args.atom_descriptors == 'feature':
-        set_extra_atom_fdim(train_args.atom_features_size)
-
-    if args.bond_features_path is not None:
-        set_extra_bond_fdim(train_args.bond_features_size)
-
-    set_explicit_h(train_args.explicit_h)
-    set_adding_hs(args.adding_h)
-    if train_args.reaction:
-        set_reaction(train_args.reaction, train_args.reaction_mode)
-    elif train_args.reaction_solvent:
-        set_reaction(True, train_args.reaction_mode)
 
     print('Loading data')
-    if smiles is not None:
-        full_data = get_data_from_smiles(
-            smiles=smiles,
-            skip_invalid_smiles=False,
-            features_generator=args.features_generator
-        )
-    else:
-        full_data = get_data(path=args.test_path, smiles_columns=args.smiles_columns, target_columns=[], ignore_columns=[], skip_invalid_smiles=False,
+    full_data = get_data(path=args.test_path, smiles_columns=args.smiles_columns, target_columns=[], ignore_columns=[], skip_invalid_smiles=False,
                              args=args, store_row=True)
 
     print('Validating SMILES')
@@ -68,7 +48,7 @@ def molecule_fingerprint(args: FingerprintArgs, smiles: List[List[str]] = None) 
             full_to_valid_indices[full_index] = valid_index
             valid_index += 1
 
-    test_data = MoleculeDataset([full_data[i] for i in sorted(full_to_valid_indices.keys())])
+    test_data = ComputeGraphDataset([full_data[i] for i in sorted(full_to_valid_indices.keys())])
 
     # Edge case if empty list of smiles is provided
     if len(test_data) == 0:
@@ -77,7 +57,7 @@ def molecule_fingerprint(args: FingerprintArgs, smiles: List[List[str]] = None) 
     print(f'Test size = {len(test_data):,}')
 
     # Create data loader
-    test_data_loader = MoleculeDataLoader(
+    test_data_loader = ComputeGraphDataLoader(
         dataset=test_data,
         batch_size=args.batch_size,
         num_workers=args.num_workers
@@ -174,15 +154,14 @@ def molecule_fingerprint(args: FingerprintArgs, smiles: List[List[str]] = None) 
 
     return all_fingerprints
 
-def model_fingerprint(model: MoleculeModel,
-            data_loader: MoleculeDataLoader,
+def model_fingerprint(model: ComputeGraphModel,
+            data_loader: ComputeGraphDataLoader,
             fingerprint_type: str = 'MPN',
             disable_progress_bar: bool = False) -> List[List[float]]:
     """
     Encodes the provided molecules into the latent fingerprint vectors, according to the provided model.
-
-    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
-    :param data_loader: A :class:`~chemprop.data.data.MoleculeDataLoader`.
+    :param model: A :class:`~chemprop.models.model.ComputeGraphModel`.
+    :param data_loader: A :class:`~chemprop.data.data.ComputeGraphDataLoader`.
     :param disable_progress_bar: Whether to disable the progress bar.
     :return: A list of fingerprint vector lists.
     """
@@ -192,7 +171,7 @@ def model_fingerprint(model: MoleculeModel,
 
     for batch in tqdm(data_loader, disable=disable_progress_bar, leave=False):
         # Prepare batch
-        batch: MoleculeDataset
+        batch: ComputeGraphDataset
         mol_batch, features_batch, atom_descriptors_batch, atom_features_batch, bond_features_batch = \
             batch.batch_graph(), batch.features(), batch.atom_descriptors(), batch.atom_features(), batch.bond_features()
 

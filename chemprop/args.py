@@ -12,7 +12,7 @@ from tap import Tap  # pip install typed-argument-parser (https://github.com/swa
 import numpy as np
 
 import chemprop.data.utils
-from chemprop.data import set_cache_mol, empty_cache
+
 from chemprop.features import get_available_features_generators
 
 
@@ -25,12 +25,10 @@ def get_checkpoint_paths(checkpoint_path: Optional[str] = None,
                          ext: str = '.pt') -> Optional[List[str]]:
     """
     Gets a list of checkpoint paths either from a single checkpoint path or from a directory of checkpoints.
-
     If :code:`checkpoint_path` is provided, only collects that one checkpoint.
     If :code:`checkpoint_paths` is provided, collects all of the provided checkpoints.
     If :code:`checkpoint_dir` is provided, walks the directory and collects all checkpoints.
     A checkpoint is any file ending in the extension ext.
-
     :param checkpoint_path: Path to a checkpoint.
     :param checkpoint_paths: List of paths to checkpoints.
     :param checkpoint_dir: Path to a directory containing checkpoints.
@@ -95,30 +93,21 @@ class CommonArgs(Tap):
     """Number of workers for the parallel data loading (0 means sequential)."""
     batch_size: int = 50
     """Batch size."""
-    atom_descriptors: Literal['feature', 'descriptor'] = None
+    node_descriptors: Literal['feature', 'descriptor'] = None
     """
-    Custom extra atom descriptors.
-    :code:`feature`: used as atom features to featurize a given molecule.
-    :code:`descriptor`: used as descriptor and concatenated to the machine learned atomic representation.
+    Custom extra node descriptors.
+    :code:`feature`: used as node features to featurize a given molecule.
+    :code:`descriptor`: used as descriptor and concatenated to the machine learned nodeic representation.
     """
-    atom_descriptors_path: str = None
-    """Path to the extra atom descriptors."""
-    bond_features_path: str = None
-    """Path to the extra bond descriptors that will be used as bond features to featurize a given molecule."""
-    no_cache_mol: bool = False
-    """
-    Whether to not cache the RDKit molecule for each SMILES string to reduce memory usage (cached by default).
-    """
-    empty_cache: bool = False
-    """
-    Whether to empty all caches before training or predicting. This is necessary if multiple jobs are run within a single script and the atom or bond features change.
-    """
+    node_descriptors_path: str = None
+    """Path to the extra node descriptors."""
+    edge_features_path: str = None
 
     def __init__(self, *args, **kwargs):
         super(CommonArgs, self).__init__(*args, **kwargs)
-        self._atom_features_size = 0
-        self._bond_features_size = 0
-        self._atom_descriptors_size = 0
+        self._node_features_size = 0
+        self._edge_features_size = 0
+        self._node_descriptors_size = 0
 
     @property
     def device(self) -> torch.device:
@@ -155,31 +144,31 @@ class CommonArgs(Tap):
         self.no_features_scaling = not features_scaling
 
     @property
-    def atom_features_size(self) -> int:
-        """The size of the atom features."""
-        return self._atom_features_size
+    def node_features_size(self) -> int:
+        """The size of the node features."""
+        return self._node_features_size
 
-    @atom_features_size.setter
-    def atom_features_size(self, atom_features_size: int) -> None:
-        self._atom_features_size = atom_features_size
-
-    @property
-    def atom_descriptors_size(self) -> int:
-        """The size of the atom descriptors."""
-        return self._atom_descriptors_size
-
-    @atom_descriptors_size.setter
-    def atom_descriptors_size(self, atom_descriptors_size: int) -> None:
-        self._atom_descriptors_size = atom_descriptors_size
+    @node_features_size.setter
+    def node_features_size(self, node_features_size: int) -> None:
+        self._node_features_size = node_features_size
 
     @property
-    def bond_features_size(self) -> int:
-        """The size of the atom features."""
-        return self._bond_features_size
+    def node_descriptors_size(self) -> int:
+        """The size of the node descriptors."""
+        return self._node_descriptors_size
 
-    @bond_features_size.setter
-    def bond_features_size(self, bond_features_size: int) -> None:
-        self._bond_features_size = bond_features_size
+    @node_descriptors_size.setter
+    def node_descriptors_size(self, node_descriptors_size: int) -> None:
+        self._node_descriptors_size = node_descriptors_size
+
+    @property
+    def edge_features_size(self) -> int:
+        """The size of the node features."""
+        return self._edge_features_size
+
+    @edge_features_size.setter
+    def edge_features_size(self, edge_features_size: int) -> None:
+        self._edge_features_size = edge_features_size
 
     def configure(self) -> None:
         self.add_argument('--gpu', choices=list(range(torch.cuda.device_count())))
@@ -197,24 +186,19 @@ class CommonArgs(Tap):
         if self.features_generator is not None and 'rdkit_2d_normalized' in self.features_generator and self.features_scaling:
             raise ValueError('When using rdkit_2d_normalized features, --no_features_scaling must be specified.')
 
-        # Validate atom descriptors
-        if (self.atom_descriptors is None) != (self.atom_descriptors_path is None):
-            raise ValueError('If atom_descriptors is specified, then an atom_descriptors_path must be provided '
+        # Validate node descriptors
+        if (self.node_descriptors is None) != (self.node_descriptors_path is None):
+            raise ValueError('If node_descriptors is specified, then an node_descriptors_path must be provided '
                              'and vice versa.')
 
-        if self.atom_descriptors is not None and self.number_of_molecules > 1:
+        if self.node_descriptors is not None and self.number_of_molecules > 1:
             raise NotImplementedError('Atom descriptors are currently only supported with one molecule '
                                       'per input (i.e., number_of_molecules = 1).')
 
-        # Validate bond descriptors
-        if self.bond_features_path is not None and self.number_of_molecules > 1:
+        # Validate edge descriptors
+        if self.edge_features_path is not None and self.number_of_molecules > 1:
             raise NotImplementedError('Bond descriptors are currently only supported with one molecule '
                                       'per input (i.e., number_of_molecules = 1).')
-
-        set_cache_mol(not self.no_cache_mol)
-
-        if self.empty_cache:
-            empty_cache()
 
 
 class TrainArgs(CommonArgs):
@@ -328,10 +312,10 @@ class TrainArgs(CommonArgs):
     """Dropout probability."""
     activation: Literal['ReLU', 'LeakyReLU', 'PReLU', 'tanh', 'SELU', 'ELU'] = 'ReLU'
     """Activation function."""
-    atom_messages: bool = False
-    """Centers messages on atoms instead of on bonds."""
+    node_messages: bool = False
+    """Centers messages on nodes instead of on edges."""
     undirected: bool = False
-    """Undirected edges (always sum the two relevant bond vectors)."""
+    """Undirected edges (always sum the two relevant edge vectors)."""
     ffn_hidden_size: int = None
     """Hidden dim for higher-capacity FFN (defaults to hidden_size)."""
     ffn_num_layers: int = 2
@@ -346,14 +330,14 @@ class TrainArgs(CommonArgs):
     """Path to file with phase features for separate val set."""
     separate_test_phase_features_path: str = None
     """Path to file with phase features for separate test set."""
-    separate_val_atom_descriptors_path: str = None
-    """Path to file with extra atom descriptors for separate val set."""
-    separate_test_atom_descriptors_path: str = None
-    """Path to file with extra atom descriptors for separate test set."""
-    separate_val_bond_features_path: str = None
-    """Path to file with extra atom descriptors for separate val set."""
-    separate_test_bond_features_path: str = None
-    """Path to file with extra atom descriptors for separate test set."""
+    separate_val_node_descriptors_path: str = None
+    """Path to file with extra node descriptors for separate val set."""
+    separate_test_node_descriptors_path: str = None
+    """Path to file with extra node descriptors for separate test set."""
+    separate_val_edge_features_path: str = None
+    """Path to file with extra node descriptors for separate val set."""
+    separate_test_edge_features_path: str = None
+    """Path to file with extra node descriptors for separate test set."""
     config_path: str = None
     """
     Path to a :code:`.json` file containing arguments. Any arguments present in the config file
@@ -362,37 +346,9 @@ class TrainArgs(CommonArgs):
     ensemble_size: int = 1
     """Number of models in ensemble."""
     aggregation: Literal['mean', 'sum', 'norm'] = 'mean'
-    """Aggregation scheme for atomic vectors into molecular vectors"""
+    """Aggregation scheme for nodeic vectors into molecular vectors"""
     aggregation_norm: int = 100
-    """For norm aggregation, number by which to divide summed up atomic features"""
-    reaction: bool = False
-    """
-    Whether to adjust MPNN layer to take reactions as input instead of molecules.
-    """
-    reaction_mode: Literal['reac_prod', 'reac_diff', 'prod_diff', 'reac_prod_balance', 'reac_diff_balance', 'prod_diff_balance'] = 'reac_diff'
-    """
-    Choices for construction of atom and bond features for reactions
-    :code:`reac_prod`: concatenates the reactants feature with the products feature.
-    :code:`reac_diff`: concatenates the reactants feature with the difference in features between reactants and products.
-    :code:`prod_diff`: concatenates the products feature with the difference in features between reactants and products.
-    :code:`reac_prod_balance`: concatenates the reactants feature with the products feature, balances imbalanced reactions.
-    :code:`reac_diff_balance`: concatenates the reactants feature with the difference in features between reactants and products, balances imbalanced reactions.
-    :code:`prod_diff_balance`: concatenates the products feature with the difference in features between reactants and products, balances imbalanced reactions.
-    """
-    reaction_solvent: bool = False
-    """
-    Whether to adjust the MPNN layer to take as input a reaction and a molecule, and to encode them with separate MPNNs.
-    """
-    explicit_h: bool = False
-    """
-    Whether H are explicitly specified in input (and should be kept this way). This option is intended to be used
-    with the :code:`reaction` or :code:`reaction_solvent` options, and applies only to the reaction part.
-    """
-    adding_h: bool = False
-    """
-    Whether RDKit molecules will be constructed with adding the Hs to them. This option is intended to be used
-    with Chemprop's default molecule or multi-molecule encoders, or in :code:`reaction_solvent` mode where it applies to the solvent only.
-    """
+    """For norm aggregation, number by which to divide summed up nodeic features"""
 
     # Training arguments
     epochs: int = 30
@@ -418,17 +374,17 @@ class TrainArgs(CommonArgs):
     """Values in targets for dataset type spectra are replaced with this value, intended to be a small positive number used to enforce positive values."""
     evidential_regularization: float = 0
     """Value used in regularization for evidential loss function. Value used in literature was 1."""
-    overwrite_default_atom_features: bool = False
+    overwrite_default_node_features: bool = False
     """
-    Overwrites the default atom descriptors with the new ones instead of concatenating them.
-    Can only be used if atom_descriptors are used as a feature.
+    Overwrites the default node descriptors with the new ones instead of concatenating them.
+    Can only be used if node_descriptors are used as a feature.
     """
-    no_atom_descriptor_scaling: bool = False
-    """Turn off atom feature scaling."""
-    overwrite_default_bond_features: bool = False
-    """Overwrites the default atom descriptors with the new ones instead of concatenating them"""
-    no_bond_features_scaling: bool = False
-    """Turn off atom feature scaling."""
+    no_node_descriptor_scaling: bool = False
+    """Turn off node feature scaling."""
+    overwrite_default_edge_features: bool = False
+    """Overwrites the default node descriptors with the new ones instead of concatenating them"""
+    no_edge_features_scaling: bool = False
+    """Turn off node feature scaling."""
     frzn_ffn_layers: int = 0
     """
     Overwrites weights for the first n layers of the ffn from checkpoint model (specified checkpoint_frzn),
@@ -509,29 +465,25 @@ class TrainArgs(CommonArgs):
         self._train_data_size = train_data_size
 
     @property
-    def atom_descriptor_scaling(self) -> bool:
+    def node_descriptor_scaling(self) -> bool:
         """
         Whether to apply normalization with a :class:`~chemprop.data.scaler.StandardScaler`
-        to the additional atom features."
+        to the additional node features."
         """
-        return not self.no_atom_descriptor_scaling
+        return not self.no_node_descriptor_scaling
 
     @property
-    def bond_feature_scaling(self) -> bool:
+    def edge_feature_scaling(self) -> bool:
         """
         Whether to apply normalization with a :class:`~chemprop.data.scaler.StandardScaler`
-        to the additional bond features."
+        to the additional edge features."
         """
-        return not self.no_bond_features_scaling
+        return not self.no_edge_features_scaling
 
     def process_args(self) -> None:
         super(TrainArgs, self).process_args()
 
         global temp_save_dir  # Prevents the temporary directory from being deleted upon function return
-
-        # Adapt the number of molecules for reaction_solvent mode
-        if self.reaction_solvent is True and self.number_of_molecules != 2:
-            raise ValueError('In reaction_solvent mode, --number_of_molecules 2 must be specified.')
 
         # Process SMILES columns
         self.smiles_columns = chemprop.data.utils.preprocess_smiles_columns(
@@ -547,14 +499,6 @@ class TrainArgs(CommonArgs):
                 for key, value in config.items():
                     setattr(self, key, value)
 
-        # Check whether the number of input columns is two for the reaction_solvent mode
-        if self.reaction_solvent is True and len(self.smiles_columns) != 2:
-            raise ValueError(f'In reaction_solvent mode, exactly two smiles column must be provided (one for reactions, and one for molecules)')
-
-        # Validate reaction/reaction_solvent mode
-        if self.reaction is True and self.reaction_solvent is True:
-            raise ValueError('Only reaction or reaction_solvent mode can be used, not both.')
-        
         # Create temporary directory as save directory if not provided
         if self.save_dir is None:
             temp_save_dir = TemporaryDirectory()
@@ -618,9 +562,9 @@ class TrainArgs(CommonArgs):
             self.ffn_hidden_size = self.hidden_size
 
         # Handle MPN variants
-        if self.atom_messages and self.undirected:
-            raise ValueError('Undirected is unnecessary when using atom_messages '
-                             'since atom_messages are by their nature undirected.')
+        if self.node_messages and self.undirected:
+            raise ValueError('Undirected is unnecessary when using node_messages '
+                             'since node_messages are by their nature undirected.')
 
         # Validate split type settings
         if not (self.split_type == 'predetermined') == (self.folds_file is not None) == (self.test_fold_index is not None):
@@ -698,8 +642,8 @@ class TrainArgs(CommonArgs):
         for (features_argument, base_features_path, val_features_path, test_features_path) in [
             ('`--features_path`', self.features_path, self.separate_val_features_path, self.separate_test_features_path),
             ('`--phase_features_path`', self.phase_features_path, self.separate_val_phase_features_path, self.separate_test_phase_features_path),
-            ('`--atom_descriptors_path`', self.atom_descriptors_path, self.separate_val_atom_descriptors_path, self.separate_test_atom_descriptors_path),
-            ('`--bond_features_path`', self.bond_features_path, self.separate_val_bond_features_path, self.separate_test_bond_features_path)
+            ('`--node_descriptors_path`', self.node_descriptors_path, self.separate_val_node_descriptors_path, self.separate_test_node_descriptors_path),
+            ('`--edge_features_path`', self.edge_features_path, self.separate_val_edge_features_path, self.separate_test_edge_features_path)
         ]:
             if base_features_path is not None:
                 if self.separate_val_path is not None and val_features_path is None:
@@ -708,21 +652,21 @@ class TrainArgs(CommonArgs):
                     raise ValueError(f'Additional features were provided using the argument {features_argument}. The same kinds of features must be provided for the separate test set.')
                 
 
-        # validate extra atom descriptor options
-        if self.overwrite_default_atom_features and self.atom_descriptors != 'feature':
-            raise NotImplementedError('Overwriting of the default atom descriptors can only be used if the'
-                                      'provided atom descriptors are features.')
+        # validate extra node descriptor options
+        if self.overwrite_default_node_features and self.node_descriptors != 'feature':
+            raise NotImplementedError('Overwriting of the default node descriptors can only be used if the'
+                                      'provided node descriptors are features.')
 
-        if not self.atom_descriptor_scaling and self.atom_descriptors is None:
-            raise ValueError('Atom descriptor scaling is only possible if additional atom features are provided.')
+        if not self.node_descriptor_scaling and self.node_descriptors is None:
+            raise ValueError('Atom descriptor scaling is only possible if additional node features are provided.')
 
-        # validate extra bond feature options
-        if self.overwrite_default_bond_features and self.bond_features_path is None:
-            raise ValueError('If you want to overwrite the default bond descriptors, '
-                             'a bond_descriptor_path must be provided.')
+        # validate extra edge feature options
+        if self.overwrite_default_edge_features and self.edge_features_path is None:
+            raise ValueError('If you want to overwrite the default edge descriptors, '
+                             'a edge_descriptor_path must be provided.')
 
-        if not self.bond_feature_scaling and self.bond_features_path is None:
-            raise ValueError('Bond descriptor scaling is only possible if additional bond features are provided.')
+        if not self.edge_feature_scaling and self.edge_features_path is None:
+            raise ValueError('Bond descriptor scaling is only possible if additional edge features are provided.')
 
         # normalize target weights
         if self.target_weights is not None:
@@ -782,10 +726,10 @@ class PredictArgs(CommonArgs):
     """Path to features data to be used with the uncertainty calibration dataset."""
     calibration_phase_features_path: str = None
     """ """
-    calibration_atom_descriptors_path: str = None
-    """Path to the extra atom descriptors."""
-    calibration_bond_features_path: str = None
-    """Path to the extra bond descriptors that will be used as bond features to featurize a given molecule."""
+    calibration_node_descriptors_path: str = None
+    """Path to the extra node descriptors."""
+    calibration_edge_features_path: str = None
+    """Path to the extra edge descriptors that will be used as edge features to featurize a given molecule."""
 
     @property
     def ensemble_size(self) -> int:
@@ -843,8 +787,8 @@ class PredictArgs(CommonArgs):
         for (features_argument, base_features_path, cal_features_path) in [
             ('`--features_path`', self.features_path, self.calibration_features_path),
             ('`--phase_features_path`', self.phase_features_path, self.calibration_phase_features_path),
-            ('`--atom_descriptors_path`', self.atom_descriptors_path, self.calibration_atom_descriptors_path),
-            ('`--bond_features_path`', self.bond_features_path, self.calibration_bond_features_path)
+            ('`--node_descriptors_path`', self.node_descriptors_path, self.calibration_node_descriptors_path),
+            ('`--edge_features_path`', self.edge_features_path, self.calibration_edge_features_path)
         ]:
             if base_features_path is not None and self.calibration_path is not None and cal_features_path is None:
                 raise ValueError(f'Additional features were provided using the argument {features_argument}. The same kinds of features must be provided for the calibration dataset.')
@@ -863,10 +807,10 @@ class InterpretArgs(CommonArgs):
     """Number of rollout steps."""
     c_puct: float = 10.0
     """Constant factor in MCTS."""
-    max_atoms: int = 20
-    """Maximum number of atoms in rationale."""
-    min_atoms: int = 8
-    """Minimum number of atoms in rationale."""
+    max_nodes: int = 20
+    """Maximum number of nodes in rationale."""
+    min_nodes: int = 8
+    """Minimum number of nodes in rationale."""
     prop_delta: float = 0.5
     """Minimum score to count as positive."""
 
@@ -917,7 +861,6 @@ class HyperoptArgs(TrainArgs):
     search_parameter_keywords: List[str] = ["basic"]
     """The model parameters over which to search for an optimal hyperparameter configuration.
     Some options are bundles of parameters or otherwise special parameter operations.
-
     Special keywords:
         basic - the default set of hyperparameters for search: depth, ffn_num_layers, dropout, and linked_hidden_size.
         linked_hidden_size - search for hidden_size and ffn_hidden_size, but constrained for them to have the same value.
@@ -925,7 +868,6 @@ class HyperoptArgs(TrainArgs):
         learning_rate - search for max_lr, init_lr, final_lr, and warmup_epochs. The search for init_lr and final_lr values
             are defined as fractions of the max_lr value. The search for warmup_epochs is as a fraction of the total epochs used.
         all - include search for all 13 inidividual keyword options
-
     Individual supported parameters:
         activation, aggregation, aggregation_norm, batch_size, depth,
         dropout, ffn_hidden_size, ffn_num_layers, final_lr, hidden_size,
@@ -1039,3 +981,4 @@ class SklearnPredictArgs(Tap):
             checkpoint_dir=self.checkpoint_dir,
             ext='.pkl'
         )
+

@@ -11,7 +11,7 @@ from sklearn.linear_model import SGDClassifier, SGDRegressor
 from tqdm import trange, tqdm
 
 from chemprop.args import SklearnTrainArgs
-from chemprop.data import MoleculeDataset, split_data, get_task_names, get_data
+from chemprop.data import ComputeGraphDataset, split_data, get_task_names, get_data
 from chemprop.features import get_features_generator
 from chemprop.train import cross_validate, evaluate_predictions
 from chemprop.utils import save_smiles_splits
@@ -23,7 +23,6 @@ def predict(model: Union[RandomForestRegressor, RandomForestClassifier, SVR, SVC
             features: List[np.ndarray]) -> List[List[float]]:
     """
     Predicts using a scikit-learn model.
-
     :param model: The trained scikit-learn model to make predictions with.
     :param model_type: The type of model.
     :param dataset_type: The type of dataset.
@@ -57,15 +56,13 @@ def predict(model: Union[RandomForestRegressor, RandomForestClassifier, SVR, SVC
     return preds
 
 def impute_sklearn(model: Union[RandomForestRegressor, RandomForestClassifier, SVR, SVC],
-                   train_data: MoleculeDataset,
+                   train_data: ComputeGraphDataset,
                    args: SklearnTrainArgs,
                    logger: Logger = None,
                    threshold: float = 0.5) -> List[float]:
     """
     Trains a single-task scikit-learn model, meaning a separate model is trained for each task.
-
     This is necessary if some tasks have None (unknown) values.
-
     :param model: The scikit-learn model to train.
     :param train_data: The training data.
     :param args: A :class:`~chemprop.args.SklearnTrainArgs` object containing arguments for
@@ -128,16 +125,14 @@ def impute_sklearn(model: Union[RandomForestRegressor, RandomForestClassifier, S
 
 
 def single_task_sklearn(model: Union[RandomForestRegressor, RandomForestClassifier, SVR, SVC],
-                        train_data: MoleculeDataset,
-                        test_data: MoleculeDataset,
+                        train_data: ComputeGraphDataset,
+                        test_data: ComputeGraphDataset,
                         metrics: List[str],
                         args: SklearnTrainArgs,
                         logger: Logger = None) -> List[float]:
     """
     Trains a single-task scikit-learn model, meaning a separate model is trained for each task.
-
     This is necessary if some tasks have None (unknown) values.
-
     :param model: The scikit-learn model to train.
     :param train_data: The training data.
     :param test_data: The test data.
@@ -185,16 +180,14 @@ def single_task_sklearn(model: Union[RandomForestRegressor, RandomForestClassifi
 
 
 def multi_task_sklearn(model: Union[RandomForestRegressor, RandomForestClassifier, SVR, SVC],
-                       train_data: MoleculeDataset,
-                       test_data: MoleculeDataset,
+                       train_data: ComputeGraphDataset,
+                       test_data: ComputeGraphDataset,
                        metrics: List[str],
                        args: SklearnTrainArgs,
                        logger: Logger = None) -> Dict[str, List[float]]:
     """
     Trains a multi-task scikit-learn model, meaning one model is trained simultaneously on all tasks.
-
     This is only possible if none of the tasks have None (unknown) values.
-
     :param model: The scikit-learn model to train.
     :param train_data: The training data.
     :param test_data: The test data.
@@ -248,14 +241,13 @@ def multi_task_sklearn(model: Union[RandomForestRegressor, RandomForestClassifie
 
 
 def run_sklearn(args: SklearnTrainArgs,
-                data: MoleculeDataset,
+                data: ComputeGraphDataset,
                 logger: Logger = None) -> Dict[str, List[float]]:
     """
     Loads data, trains a scikit-learn model, and returns test scores for the model checkpoint with the highest validation score.
-
     :param args: A :class:`~chemprop.args.SklearnTrainArgs` object containing arguments for
                  loading data and training the scikit-learn model.
-    :param data: A :class:`~chemprop.data.MoleculeDataset` containing the data.
+    :param data: A :class:`~chemprop.data.ComputeGraphDataset` containing the data.
     :param logger: A logger to record output.
     :return: A dictionary mapping each metric in :code:`metrics` to a list of values for each task.
     """
@@ -357,7 +349,6 @@ def run_sklearn(args: SklearnTrainArgs,
 
 def sklearn_train() -> None:
     """Parses scikit-learn training arguments and trains a scikit-learn model.
-
     This is the entry point for the command line command :code:`sklearn_train`.
     """
     cross_validate(args=SklearnTrainArgs().parse_args(), train_func=run_sklearn)

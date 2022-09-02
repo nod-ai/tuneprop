@@ -3,8 +3,8 @@ import logging
 from typing import Dict, List
 
 from .predict import predict
-from chemprop.data import MoleculeDataLoader, StandardScaler
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataLoader, StandardScaler
+from chemprop.models import ComputeGraphModel
 from chemprop.train import get_metric_func
 
 
@@ -18,7 +18,6 @@ def evaluate_predictions(preds: List[List[float]],
                          logger: logging.Logger = None) -> Dict[str, List[float]]:
     """
     Evaluates predictions using a metric function after filtering out invalid targets.
-
     :param preds: A list of lists of shape :code:`(data_size, num_tasks)` with model predictions.
     :param targets: A list of lists of shape :code:`(data_size, num_tasks)` with targets.
     :param num_tasks: Number of tasks.
@@ -86,8 +85,8 @@ def evaluate_predictions(preds: List[List[float]],
     return results
 
 
-def evaluate(model: MoleculeModel,
-             data_loader: MoleculeDataLoader,
+def evaluate(model: ComputeGraphModel,
+             data_loader: ComputeGraphDataLoader,
              num_tasks: int,
              metrics: List[str],
              dataset_type: str,
@@ -95,16 +94,14 @@ def evaluate(model: MoleculeModel,
              logger: logging.Logger = None) -> Dict[str, List[float]]:
     """
     Evaluates an ensemble of models on a dataset by making predictions and then evaluating the predictions.
-
-    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
-    :param data_loader: A :class:`~chemprop.data.data.MoleculeDataLoader`.
+    :param model: A :class:`~chemprop.models.model.ComputeGraphModel`.
+    :param data_loader: A :class:`~chemprop.data.data.ComputeGraphDataLoader`.
     :param num_tasks: Number of tasks.
     :param metrics: A list of names of metric functions.
     :param dataset_type: Dataset type.
     :param scaler: A :class:`~chemprop.features.scaler.StandardScaler` object fit on the training targets.
     :param logger: A logger to record output.
     :return: A dictionary mapping each metric in :code:`metrics` to a list of values for each task.
-
     """
     # Inequality targets only need for evaluation of certain regression metrics
     if any(m in metrics for m in ['bounded_rmse', 'bounded_mse', 'bounded_mae']):

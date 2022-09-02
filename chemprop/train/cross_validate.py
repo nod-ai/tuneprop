@@ -13,21 +13,19 @@ import pandas as pd
 from .run_training import run_training
 from chemprop.args import TrainArgs
 from chemprop.constants import TEST_SCORES_FILE_NAME, TRAIN_LOGGER_NAME
-from chemprop.data import get_data, get_task_names, MoleculeDataset, validate_dataset_type
+from chemprop.data import get_data, get_task_names, ComputeGraphDataset, validate_dataset_type
 from chemprop.utils import create_logger, makedirs, timeit, multitask_mean
-from chemprop.features import set_extra_atom_fdim, set_extra_bond_fdim, set_explicit_h, set_adding_hs, set_reaction, reset_featurization_parameters
+from chemprop.features import reset_featurization_parameters
 
 
 @timeit(logger_name=TRAIN_LOGGER_NAME)
 def cross_validate(args: TrainArgs,
-                   train_func: Callable[[TrainArgs, MoleculeDataset, Logger], Dict[str, List[float]]]
+                   train_func: Callable[[TrainArgs, ComputeGraphDataset, Logger], Dict[str, List[float]]]
                    ) -> Tuple[float, float]:
     """
     Runs k-fold cross-validation.
-
     For each of k splits (folds) of the data, trains and tests a model on that split
     and aggregates the performance across folds.
-
     :param args: A :class:`~chemprop.args.TrainArgs` object containing arguments for
                  loading data and training the Chemprop model.
     :param train_func: Function which runs training.
@@ -63,12 +61,6 @@ def cross_validate(args: TrainArgs,
 
     # set explicit H option and reaction option
     reset_featurization_parameters(logger=logger)
-    set_explicit_h(args.explicit_h)
-    set_adding_hs(args.adding_h)
-    if args.reaction:
-        set_reaction(args.reaction, args.reaction_mode)
-    elif args.reaction_solvent:
-        set_reaction(True, args.reaction_mode)
     
     # Get data
     debug('Loading data')
@@ -85,12 +77,6 @@ def cross_validate(args: TrainArgs,
     if args.atom_descriptors == 'descriptor':
         args.atom_descriptors_size = data.atom_descriptors_size()
         args.ffn_hidden_size += args.atom_descriptors_size
-    elif args.atom_descriptors == 'feature':
-        args.atom_features_size = data.atom_features_size()
-        set_extra_atom_fdim(args.atom_features_size)
-    if args.bond_features_path is not None:
-        args.bond_features_size = data.bond_features_size()
-        set_extra_bond_fdim(args.bond_features_size)
 
     debug(f'Number of tasks = {args.num_tasks}')
 
@@ -200,7 +186,6 @@ def cross_validate(args: TrainArgs,
 
 def chemprop_train() -> None:
     """Parses Chemprop training arguments and trains (cross-validates) a Chemprop model.
-
     This is the entry point for the command line command :code:`chemprop_train`.
     """
     cross_validate(args=TrainArgs().parse_args(), train_func=run_training)

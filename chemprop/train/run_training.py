@@ -17,25 +17,23 @@ from .loss_functions import get_loss_func
 from chemprop.spectra_utils import normalize_spectra, load_phase_mask
 from chemprop.args import TrainArgs
 from chemprop.constants import MODEL_FILE_NAME
-from chemprop.data import get_class_sizes, get_data, MoleculeDataLoader, MoleculeDataset, set_cache_graph, split_data
-from chemprop.models import MoleculeModel
+from chemprop.data import get_class_sizes, get_data, ComputeGraphDataLoader, ComputeGraphDataset, split_data
+from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import param_count, param_count_all
 from chemprop.utils import build_optimizer, build_lr_scheduler, load_checkpoint, makedirs, \
     save_checkpoint, save_smiles_splits, load_frzn_model, multitask_mean
 
 
 def run_training(args: TrainArgs,
-                 data: MoleculeDataset,
+                 data: ComputeGraphDataset,
                  logger: Logger = None) -> Dict[str, List[float]]:
     """
     Loads data, trains a Chemprop model, and returns test scores for the model checkpoint with the highest validation score.
-
     :param args: A :class:`~chemprop.args.TrainArgs` object containing arguments for
                  loading data and training the Chemprop model.
-    :param data: A :class:`~chemprop.data.MoleculeDataset` containing the data.
+    :param data: A :class:`~chemprop.data.ComputeGraphDataset` containing the data.
     :param logger: A logger to record output.
     :return: A dictionary mapping each metric in :code:`args.metrics` to a list of values for each task.
-
     """
     if logger is not None:
         debug, info = logger.debug, logger.info
@@ -192,16 +190,10 @@ def run_training(args: TrainArgs,
     else:
         sum_test_preds = np.zeros((len(test_smiles), args.num_tasks))
 
-    # Automatically determine whether to cache
-    if len(data) <= args.cache_cutoff:
-        set_cache_graph(True)
-        num_workers = 0
-    else:
-        set_cache_graph(False)
-        num_workers = args.num_workers
+    num_workers = args.num_workers
 
     # Create data loaders
-    train_data_loader = MoleculeDataLoader(
+    train_data_loader = ComputeGraphDataLoader(
         dataset=train_data,
         batch_size=args.batch_size,
         num_workers=num_workers,
@@ -209,12 +201,12 @@ def run_training(args: TrainArgs,
         shuffle=True,
         seed=args.seed
     )
-    val_data_loader = MoleculeDataLoader(
+    val_data_loader = ComputeGraphDataLoader(
         dataset=val_data,
         batch_size=args.batch_size,
         num_workers=num_workers
     )
-    test_data_loader = MoleculeDataLoader(
+    test_data_loader = ComputeGraphDataLoader(
         dataset=test_data,
         batch_size=args.batch_size,
         num_workers=num_workers
@@ -239,7 +231,7 @@ def run_training(args: TrainArgs,
             model = load_checkpoint(args.checkpoint_paths[model_idx], logger=logger)
         else:
             debug(f'Building model {model_idx}')
-            model = MoleculeModel(args)
+            model = ComputeGraphModel(args)
             
         # Optionally, overwrite weights:
         if args.checkpoint_frzn is not None:

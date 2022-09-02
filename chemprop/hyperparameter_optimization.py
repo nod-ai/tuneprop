@@ -10,7 +10,7 @@ import numpy as np
 
 from chemprop.args import HyperoptArgs
 from chemprop.constants import HYPEROPT_LOGGER_NAME
-from chemprop.models import MoleculeModel
+from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import param_count
 from chemprop.train import cross_validate, run_training
 from chemprop.utils import create_logger, makedirs, timeit
@@ -22,16 +22,12 @@ from chemprop.hyperopt_utils import merge_trials, load_trials, save_trials, \
 def hyperopt(args: HyperoptArgs) -> None:
     """
     Runs hyperparameter optimization on a Chemprop model.
-
     Hyperparameter optimization optimizes the following parameters:
-
     * :code:`hidden_size`: The hidden size of the neural network layers is selected from {300, 400, ..., 2400}
     * :code:`depth`: The number of message passing iterations is selected from {2, 3, 4, 5, 6}
     * :code:`dropout`: The dropout probability is selected from {0.0, 0.05, ..., 0.4}
     * :code:`ffn_num_layers`: The number of feed-forward layers after message passing is selected from {1, 2, 3}
-
     The best set of hyperparameters is saved as a JSON file to :code:`args.config_save_path`.
-
     :param args: A :class:`~chemprop.args.HyperoptArgs` object containing arguments for hyperparameter
                  optimization in addition to all arguments needed for training.
     """
@@ -87,7 +83,7 @@ def hyperopt(args: HyperoptArgs) -> None:
         mean_score, std_score = cross_validate(args=hyper_args, train_func=run_training)
 
         # Record results
-        temp_model = MoleculeModel(hyper_args)
+        temp_model = ComputeGraphModel(hyper_args)
         num_params = param_count(temp_model)
         logger.info(f'Trial results with seed {seed}')
         logger.info(hyperparams)
@@ -168,7 +164,6 @@ def hyperopt(args: HyperoptArgs) -> None:
 
 def chemprop_hyperopt() -> None:
     """Runs hyperparameter optimization for a Chemprop model.
-
     This is the entry point for the command line command :code:`chemprop_hyperopt`.
     """
     hyperopt(args=HyperoptArgs().parse_args())

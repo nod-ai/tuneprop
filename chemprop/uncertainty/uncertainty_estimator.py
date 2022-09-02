@@ -1,8 +1,8 @@
 from typing import Iterator, List
 
-from chemprop.data import MoleculeDataset, StandardScaler
-from chemprop.data.data import MoleculeDataLoader
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataset, StandardScaler
+from chemprop.data.data import ComputeGraphDataLoader
+from chemprop.models import ComputeGraphModel
 from chemprop.uncertainty.uncertainty_calibrator import UncertaintyCalibrator
 from chemprop.uncertainty.uncertainty_predictor import build_uncertainty_predictor
 
@@ -10,9 +10,9 @@ from chemprop.uncertainty.uncertainty_predictor import build_uncertainty_predict
 class UncertaintyEstimator:
     def __init__(
         self,
-        test_data: MoleculeDataset,
-        test_data_loader: MoleculeDataLoader,
-        models: Iterator[MoleculeModel],
+        test_data: ComputeGraphDataset,
+        test_data_loader: ComputeGraphDataLoader,
+        models: Iterator[ComputeGraphModel],
         scalers: Iterator[StandardScaler],
         num_models: int,
         uncertainty_method: str,

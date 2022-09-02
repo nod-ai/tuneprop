@@ -1,8 +1,8 @@
-from .model import MoleculeModel
-from .mpn import MPN, MPNEncoder
+from .model import ComputeGraphModel
+from .mpnn import MPNN, MPNNEncoder
 
 __all__ = [
-    'MoleculeModel',
-    'MPN',
-    'MPNEncoder'
+    'ComputeGraphModel',
+    'MPNN',
+    'MPNNEncoder'
 ]

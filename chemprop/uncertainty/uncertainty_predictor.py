@@ -4,8 +4,8 @@ from typing import Iterator, List
 import numpy as np
 from tqdm import tqdm
 
-from chemprop.data import MoleculeDataset, StandardScaler, MoleculeDataLoader
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataset, StandardScaler, ComputeGraphDataLoader
+from chemprop.models import ComputeGraphModel
 from chemprop.train.predict import predict
 from chemprop.spectra_utils import normalize_spectra, roundrobin_sid
 
@@ -17,9 +17,9 @@ class UncertaintyPredictor(ABC):
     """
     def __init__(
         self,
-        test_data: MoleculeDataset,
-        test_data_loader: MoleculeDataLoader,
-        models: Iterator[MoleculeModel],
+        test_data: ComputeGraphDataset,
+        test_data_loader: ComputeGraphDataLoader,
+        models: Iterator[ComputeGraphModel],
         scalers: Iterator[StandardScaler],
         num_models: int,
         dataset_type: str,
@@ -790,9 +790,9 @@ class ClassPredictor(UncertaintyPredictor):
 
 def build_uncertainty_predictor(
     uncertainty_method: str,
-    test_data: MoleculeDataset,
-    test_data_loader: MoleculeDataLoader,
-    models: Iterator[MoleculeModel],
+    test_data: ComputeGraphDataset,
+    test_data_loader: ComputeGraphDataLoader,
+    models: Iterator[ComputeGraphModel],
     scalers: Iterator[StandardScaler],
     num_models: int,
     dataset_type: str,

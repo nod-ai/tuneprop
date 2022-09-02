@@ -9,13 +9,13 @@ from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import tqdm
 
 from chemprop.args import TrainArgs
-from chemprop.data import MoleculeDataLoader, MoleculeDataset
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataLoader, ComputeGraphDataset
+from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import compute_gnorm, compute_pnorm, NoamLR
 
 
-def train(model: MoleculeModel,
-          data_loader: MoleculeDataLoader,
+def train(model: ComputeGraphModel,
+          data_loader: ComputeGraphDataLoader,
           loss_func: Callable,
           optimizer: Optimizer,
           scheduler: _LRScheduler,
@@ -26,8 +26,8 @@ def train(model: MoleculeModel,
     """
     Trains a model for an epoch.
 
-    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
-    :param data_loader: A :class:`~chemprop.data.data.MoleculeDataLoader`.
+    :param model: A :class:`~chemprop.models.model.ComputeModel`.
+    :param data_loader: A :class:`~chemprop.data.data.ComputeGraphDataLoader`.
     :param loss_func: Loss function.
     :param optimizer: An optimizer.
     :param scheduler: A learning rate scheduler.
@@ -44,7 +44,7 @@ def train(model: MoleculeModel,
 
     for batch in tqdm(data_loader, total=len(data_loader), leave=False):
         # Prepare batch
-        batch: MoleculeDataset
+        batch: ComputeGraphDataset
         mol_batch, features_batch, target_batch, mask_batch, atom_descriptors_batch, atom_features_batch, bond_features_batch, data_weights_batch = \
             batch.batch_graph(), batch.features(), batch.targets(), batch.mask(), batch.atom_descriptors(), \
             batch.atom_features(), batch.bond_features(), batch.data_weights()
@@ -142,3 +142,4 @@ def train(model: MoleculeModel,
                     writer.add_scalar(f'learning_rate_{i}', lr, n_iter)
 
     return n_iter
+

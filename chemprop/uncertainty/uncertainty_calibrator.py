@@ -2,14 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Iterator, List
 
 import numpy as np
-from chemprop.data.data import MoleculeDataLoader
+from chemprop.data.data import ComputeGraphDataLoader
 from scipy.special import erfinv, softmax, logit, expit
 from scipy.optimize import fmin
 from scipy.stats import t
 from sklearn.isotonic import IsotonicRegression
 
-from chemprop.data import MoleculeDataset, StandardScaler
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataset, StandardScaler
+from chemprop.models import ComputeGraphModel
 from chemprop.uncertainty.uncertainty_predictor import build_uncertainty_predictor, UncertaintyPredictor
 
 
@@ -25,9 +25,9 @@ class UncertaintyCalibrator(ABC):
         uncertainty_method: str,
         interval_percentile: int,
         regression_calibrator_metric: str,
-        calibration_data: MoleculeDataset,
-        calibration_data_loader: MoleculeDataLoader,
-        models: Iterator[MoleculeModel],
+        calibration_data: ComputeGraphDataset,
+        calibration_data_loader: ComputeGraphDataLoader,
+        models: Iterator[ComputeGraphModel],
         scalers: Iterator[StandardScaler],
         num_models: int,
         dataset_type: str,
@@ -738,9 +738,9 @@ def build_uncertainty_calibrator(
     uncertainty_method: str,
     regression_calibrator_metric: str,
     interval_percentile: int,
-    calibration_data: MoleculeDataset,
-    calibration_data_loader: MoleculeDataLoader,
-    models: Iterator[MoleculeModel],
+    calibration_data: ComputeGraphDataset,
+    calibration_data_loader: ComputeGraphDataLoader,
+    models: Iterator[ComputeGraphModel],
     scalers: Iterator[StandardScaler],
     num_models: int,
     dataset_type: str,

@@ -5,20 +5,22 @@ from rdkit import Chem
 import torch
 import torch.nn as nn
 
-from .mpn import MPN
+from .mpnn import MPNN
 from chemprop.args import TrainArgs
-from chemprop.features import BatchMolGraph
+from chemprop.features import BatchComputeGraph
 from chemprop.nn_utils import get_activation_function, initialize_weights
 
+from nodalpa.computational_graph import ComputationalGraph
 
-class MoleculeModel(nn.Module):
+
+class ComputeGraphModel(nn.Module):
     """A :class:`MoleculeModel` is a model which contains a message passing network following by feed-forward layers."""
 
     def __init__(self, args: TrainArgs):
         """
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
         """
-        super(MoleculeModel, self).__init__()
+        super(ComputeGraphModel, self).__init__()
 
         self.classification = args.dataset_type == 'classification'
         self.multiclass = args.dataset_type == 'multiclass'
@@ -60,10 +62,9 @@ class MoleculeModel(nn.Module):
     def create_encoder(self, args: TrainArgs) -> None:
         """
         Creates the message passing encoder for the model.
-
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
         """
-        self.encoder = MPN(args)
+        self.encoder = MPNN(args)
 
         if args.checkpoint_frzn is not None:
             if args.freeze_first_only:  # Freeze only the first encoder
@@ -76,7 +77,6 @@ class MoleculeModel(nn.Module):
     def create_ffn(self, args: TrainArgs) -> None:
         """
         Creates the feed-forward layers for the model.
-
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
         """
         self.multiclass = args.dataset_type == 'multiclass'
@@ -145,15 +145,14 @@ class MoleculeModel(nn.Module):
                     param.requires_grad = False
 
     def fingerprint(self,
-                    batch: Union[List[List[str]], List[List[Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]], List[BatchMolGraph]],
+                    batch: Union[List[List[str]], List[List[ComputationalGraph]], List[BatchComputeGraph]],
                     features_batch: List[np.ndarray] = None,
                     atom_descriptors_batch: List[np.ndarray] = None,
                     atom_features_batch: List[np.ndarray] = None,
                     bond_features_batch: List[np.ndarray] = None,
-                    fingerprint_type: str = 'MPN') -> torch.Tensor:
+                    fingerprint_type: str = 'MPNN') -> torch.Tensor:
         """
         Encodes the latent representations of the input molecules from intermediate stages of the model.
-
         :param batch: A list of list of SMILES, a list of list of RDKit molecules, or a
                       list of :class:`~chemprop.features.featurization.BatchMolGraph`.
                       The outer list or BatchMolGraph is of length :code:`num_molecules` (number of datapoints in batch),
@@ -161,10 +160,10 @@ class MoleculeModel(nn.Module):
         :param features_batch: A list of numpy arrays containing additional features.
         :param atom_descriptors_batch: A list of numpy arrays containing additional atom descriptors.
         :param fingerprint_type: The choice of which type of latent representation to return as the molecular fingerprint. Currently
-                                 supported MPN for the output of the MPNN portion of the model or last_FFN for the input to the final readout layer.
+                                 supported MPNN for the output of the MPNNN portion of the model or last_FFN for the input to the final readout layer.
         :return: The latent fingerprint vectors.
         """
-        if fingerprint_type == 'MPN':
+        if fingerprint_type == 'MPNN':
             return self.encoder(batch, features_batch, atom_descriptors_batch,
                                 atom_features_batch, bond_features_batch)
         elif fingerprint_type == 'last_FFN':
@@ -174,14 +173,13 @@ class MoleculeModel(nn.Module):
             raise ValueError(f'Unsupported fingerprint type {fingerprint_type}.')
 
     def forward(self,
-                batch: Union[List[List[str]], List[List[Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]], List[BatchMolGraph]],
+                batch: Union[List[List[str]], List[List[ComputationalGraph]], List[BatchComputeGraph]],
                 features_batch: List[np.ndarray] = None,
                 atom_descriptors_batch: List[np.ndarray] = None,
                 atom_features_batch: List[np.ndarray] = None,
                 bond_features_batch: List[np.ndarray] = None) -> torch.FloatTensor:
         """
         Runs the :class:`MoleculeModel` on input.
-
         :param batch: A list of list of SMILES, a list of list of RDKit molecules, or a
                       list of :class:`~chemprop.features.featurization.BatchMolGraph`.
                       The outer list or BatchMolGraph is of length :code:`num_molecules` (number of datapoints in batch),

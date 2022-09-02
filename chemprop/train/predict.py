@@ -4,14 +4,14 @@ import torch
 from tqdm import tqdm
 import numpy as np
 
-from chemprop.data import MoleculeDataLoader, MoleculeDataset, StandardScaler
-from chemprop.models import MoleculeModel
+from chemprop.data import ComputeGraphDataLoader, ComputeGraphDataset, StandardScaler
+from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import activate_dropout
 
 
 def predict(
-    model: MoleculeModel,
-    data_loader: MoleculeDataLoader,
+    model: ComputeGraphModel,
+    data_loader: ComputeGraphDataLoader,
     disable_progress_bar: bool = False,
     scaler: StandardScaler = None,
     return_unc_parameters: bool = False,
@@ -19,9 +19,8 @@ def predict(
 ) -> List[List[float]]:
     """
     Makes predictions on a dataset using an ensemble of models.
-
-    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
-    :param data_loader: A :class:`~chemprop.data.data.MoleculeDataLoader`.
+    :param model: A :class:`~chemprop.models.model.ComputeGraphModel`.
+    :param data_loader: A :class:`~chemprop.data.data.ComputeGraphDataLoader`.
     :param disable_progress_bar: Whether to disable the progress bar.
     :param scaler: A :class:`~chemprop.features.scaler.StandardScaler` object fit on the training targets.
     :param return_unc_parameters: A bool indicating whether additional uncertainty parameters would be returned alongside the mean predictions.
@@ -43,7 +42,7 @@ def predict(
 
     for batch in tqdm(data_loader, disable=disable_progress_bar, leave=False):
         # Prepare batch
-        batch: MoleculeDataset
+        batch: ComputeGraphDataset
         mol_batch = batch.batch_graph()
         features_batch = batch.features()
         atom_descriptors_batch = batch.atom_descriptors()

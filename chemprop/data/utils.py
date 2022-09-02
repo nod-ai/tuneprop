@@ -10,10 +10,9 @@ from rdkit import Chem
 import numpy as np
 from tqdm import tqdm
 
-from .data import MoleculeDatapoint, MoleculeDataset, make_mols
-from .scaffold import log_scaffold_stats, scaffold_split
+from .data import ComputeGraphDatapoint, ComputeGraphDataset, make_graphs
 from chemprop.args import PredictArgs, TrainArgs
-from chemprop.features import load_features, load_valid_atom_or_bond_features, is_mol
+from chemprop.features import load_features, load_valid_atom_or_bond_features
 
 def get_header(path: str) -> List[str]:
     """
@@ -156,73 +155,6 @@ def get_smiles(path: str,
 
     return smiles
 
-
-def filter_invalid_smiles(data: MoleculeDataset) -> MoleculeDataset:
-    """
-    Filters out invalid SMILES.
-
-    :param data: A :class:`~chemprop.data.MoleculeDataset`.
-    :return: A :class:`~chemprop.data.MoleculeDataset` with only the valid molecules.
-    """
-    return MoleculeDataset([datapoint for datapoint in tqdm(data)
-                            if all(s != '' for s in datapoint.smiles) and all(m is not None for m in datapoint.mol)
-                            and all(m.GetNumHeavyAtoms() > 0 for m in datapoint.mol if not isinstance(m, tuple))
-                            and all(m[0].GetNumHeavyAtoms() + m[1].GetNumHeavyAtoms() > 0 for m in datapoint.mol if isinstance(m, tuple))])
-
-
-def get_invalid_smiles_from_file(path: str = None,
-               smiles_columns: Union[str, List[str]] = None,
-               header: bool = True,
-               reaction: bool = False,
-               ) -> Union[List[str], List[List[str]]]:
-    """
-    Returns the invalid SMILES from a data CSV file.
-
-    :param path: Path to a CSV file.
-    :param smiles_columns: A list of the names of the columns containing SMILES.
-                           By default, uses the first :code:`number_of_molecules` columns.
-    :param header: Whether the CSV file contains a header.
-    :param reaction: Boolean whether the SMILES strings are to be treated as a reaction.
-    :return: A list of lists of SMILES, for the invalid SMILES in the file.
-    """
-    smiles = get_smiles(path=path, smiles_columns=smiles_columns, header=header)
-
-    invalid_smiles = get_invalid_smiles_from_list(smiles=smiles, reaction=reaction)
-
-    return invalid_smiles
-
-
-def get_invalid_smiles_from_list(smiles: List[List[str]], reaction: bool = False) -> List[List[str]]:
-    """
-    Returns the invalid SMILES from a list of lists of SMILES strings.
-
-    :param smiles: A list of list of SMILES.
-    :param reaction: Boolean whether the SMILES strings are to be treated as a reaction.
-    :return: A list of lists of SMILES, for the invalid SMILES among the lists provided.
-    """
-    invalid_smiles = []
-
-    # If the first SMILES in the column is a molecule, the remaining SMILES in the same column should all be a molecule.
-    # Similarly, if the first SMILES in the column is a reaction, the remaining SMILES in the same column should all
-    # correspond to reaction. Therefore, get `is_mol_list` only using the first element in smiles.
-    is_mol_list = [is_mol(s) for s in smiles[0]]
-    is_reaction_list = [True if not x and reaction else False for x in is_mol_list]
-    is_explicit_h_list = [False for x in is_mol_list]  # set this to False as it is not needed for invalid SMILES check
-    is_adding_hs_list = [False for x in is_mol_list]  # set this to False as it is not needed for invalid SMILES check
-
-    for mol_smiles in smiles:
-        mols = make_mols(smiles=mol_smiles, reaction_list=is_reaction_list, keep_h_list=is_explicit_h_list,
-                         add_h_list=is_adding_hs_list)
-        if any(s == '' for s in mol_smiles) or \
-           any(m is None for m in mols) or \
-           any(m.GetNumHeavyAtoms() == 0 for m in mols if not isinstance(m, tuple)) or \
-           any(m[0].GetNumHeavyAtoms() + m[1].GetNumHeavyAtoms() == 0 for m in mols if isinstance(m, tuple)):
-
-            invalid_smiles.append(mol_smiles)
-
-    return invalid_smiles
-
-
 def get_data(path: str,
              smiles_columns: Union[str, List[str]] = None,
              target_columns: List[str] = None,
@@ -239,7 +171,7 @@ def get_data(path: str,
              store_row: bool = False,
              logger: Logger = None,
              loss_function: str = None,
-             skip_none_targets: bool = False) -> MoleculeDataset:
+             skip_none_targets: bool = False) -> ComputeGraphDataset:
     """
     Gets SMILES and target values from a CSV file.
 
@@ -440,7 +372,7 @@ def get_data(path: str,
 def get_data_from_smiles(smiles: List[List[str]],
                          skip_invalid_smiles: bool = True,
                          logger: Logger = None,
-                         features_generator: List[str] = None) -> MoleculeDataset:
+                         features_generator: List[str] = None) -> ComputeGraphDataset:
     """
     Converts a list of SMILES to a :class:`~chemprop.data.MoleculeDataset`.
 
@@ -490,16 +422,16 @@ def get_inequality_targets(path: str, target_columns: List[str] = None) -> List[
     return gt_targets, lt_targets
 
 
-def split_data(data: MoleculeDataset,
+def split_data(data: ComputeGraphDataset,
                split_type: str = 'random',
                sizes: Tuple[float, float, float] = (0.8, 0.1, 0.1),
                key_molecule_index: int = 0,
                seed: int = 0,
                num_folds: int = 1,
                args: TrainArgs = None,
-               logger: Logger = None) -> Tuple[MoleculeDataset,
-                                               MoleculeDataset,
-                                               MoleculeDataset]:
+               logger: Logger = None) -> Tuple[ComputeGraphDataset,
+                                               ComputeGraphDataset,
+                                               ComputeGraphDataset]:
     r"""
     Splits data into training, validation, and test splits.
 
@@ -590,8 +522,6 @@ def split_data(data: MoleculeDataset,
             with open(folds_file, 'rb') as f:
                 all_fold_indices = pickle.load(f, encoding='latin1')  # in case we're loading indices from python2
 
-        log_scaffold_stats(data, all_fold_indices, logger=logger)
-
         folds = [[data[i] for i in fold_indices] for fold_indices in all_fold_indices]
 
         test = folds[test_fold_index]
@@ -612,9 +542,6 @@ def split_data(data: MoleculeDataset,
             val = train_val[train_size:]
 
         return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
-
-    elif split_type == 'scaffold_balanced':
-        return scaffold_split(data, sizes=sizes, balanced=True, key_molecule_index=key_molecule_index, seed=seed, logger=logger)
 
     elif split_type == 'random_with_repeated_smiles': # Use to constrain data with the same smiles go in the same split.
         smiles_dict=defaultdict(set)
@@ -656,7 +583,7 @@ def split_data(data: MoleculeDataset,
         raise ValueError(f'split_type "{split_type}" not supported.')
 
 
-def get_class_sizes(data: MoleculeDataset, proportion: bool = True) -> List[List[float]]:
+def get_class_sizes(data: ComputeGraphDataset, proportion: bool = True) -> List[List[float]]:
     """
     Determines the proportions of the different classes in a classification dataset.
 
@@ -692,7 +619,7 @@ def get_class_sizes(data: MoleculeDataset, proportion: bool = True) -> List[List
 
 
 #  TODO: Validate multiclass dataset type.
-def validate_dataset_type(data: MoleculeDataset, dataset_type: str) -> None:
+def validate_dataset_type(data: ComputeGraphDataset, dataset_type: str) -> None:
     """
     Validates the dataset type to ensure the data matches the provided type.
 
