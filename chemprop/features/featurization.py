@@ -7,8 +7,8 @@ import numpy as np
 
 from math import log
 
-from nodalpa.computational_graph import Instruction, TensorShape
-from nodalpa.basic_computational_graph import BasicComputationalGraph
+from chemprop.features.computational_graph.computational_graph import Instruction, TensorShape
+from chemprop.features.computational_graph.basic_computational_graph import BasicComputationalGraph
 
 class Featurization_parameters:
     """
@@ -68,7 +68,7 @@ def get_edge_fdim(node_messages: bool = True) -> int:
     :return: The dimensionality of the edge feature vector.
     """
 
-    return PARAMS.BOND_FDIM + (not node_messages) * get_node_fdim()
+    return PARAMS.EDGE_FDIM + (not node_messages) * get_node_fdim()
 
 
 def onek_encoding_unk(value: int, choices: List[int]) -> List[int]:

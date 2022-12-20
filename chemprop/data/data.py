@@ -10,7 +10,7 @@ from .scaler import StandardScaler
 from chemprop.features import get_features_generator
 from chemprop.features import BatchComputeGraph, ComputeGraph
 
-from nodalpa.computational_graph import ComputationalGraph
+from chemprop.features.computational_graph.computational_graph import ComputationalGraph
 
 def cache_graph() -> bool:
     r"""Returns whether RDKit compute_graphs will be cached."""
@@ -55,7 +55,7 @@ class ComputeGraphDatapoint:
         if features is not None and features_generator is not None:
             raise ValueError('Cannot provide both loaded features and a features generator.')
 
-        self.graphs = graphs
+        self.compute_graphs = graphs
         self.targets = targets
         self.row = row
         self.features = features
@@ -98,7 +98,7 @@ class ComputeGraphDatapoint:
     def graphs(self) -> List[ComputationalGraph]:
         """Gets the list of compute_graphs"""
 
-        return self.graphs
+        return self.compute_graphs
 
     @property
     def number_of_compute_graphs(self) -> int:
@@ -106,7 +106,10 @@ class ComputeGraphDatapoint:
         Gets the number of compute_graphs in the :class:`ComputeGraphDatapoint`.
         :return: The number of compute_graphs.
         """
-        return len(self.graphs)
+        return len(self.compute_graphs)
+
+    def set_graphs(self, graphs: List[ComputationalGraph]) -> None:
+        self.compute_graphs = graphs
 
     def set_features(self, features: np.ndarray) -> None:
         """
@@ -182,9 +185,9 @@ class ComputeGraphDataset(Dataset):
         :return: A list of SMILES or a list of lists of RDKit compute_graphs, depending on :code:`flatten`.
         """
         if flatten:
-            return [graph for d in self._data for graph in d.graph]
+            return [graph for d in self._data for graph in d.compute_graphs]
 
-        return [d.graph for d in self._data]
+        return [d.compute_graphs for d in self._data]
 
     @property
     def number_of_compute_graphs(self) -> int:
@@ -211,12 +214,12 @@ class ComputeGraphDataset(Dataset):
             graphs = []
             for d in self._data:
                 graphs_list = []
-                for s, m in zip(d.smiles, d.graph):
-                    if len(d.smiles) > 1 and (d.node_features is not None or d.edge_features is not None):
+                for g in d.compute_graphs:
+                    if len(d.compute_graphs) > 1 and (d.node_features is not None or d.edge_features is not None):
                         raise NotImplementedError('Atom descriptors are currently only supported with one compute_graph '
                                                     'per input (i.e., number_of_compute_graphs = 1).')
 
-                    graph = ComputeGraph(m, d.node_features, d.edge_features,
+                    graph = ComputeGraph(g, d.node_features, d.edge_features,
                                             overwrite_default_node_features=d.overwrite_default_node_features,
                                             overwrite_default_edge_features=d.overwrite_default_edge_features)
                     graphs_list.append(graph)

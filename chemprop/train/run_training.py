@@ -21,7 +21,7 @@ from chemprop.data import get_class_sizes, get_data, ComputeGraphDataLoader, Com
 from chemprop.models import ComputeGraphModel
 from chemprop.nn_utils import param_count, param_count_all
 from chemprop.utils import build_optimizer, build_lr_scheduler, load_checkpoint, makedirs, \
-    save_checkpoint, save_smiles_splits, load_frzn_model, multitask_mean
+    save_checkpoint, load_frzn_model, multitask_mean
 
 
 def run_training(args: TrainArgs,
@@ -49,20 +49,20 @@ def run_training(args: TrainArgs,
         test_data = get_data(path=args.separate_test_path,
                              args=args,
                              features_path=args.separate_test_features_path,
-                             atom_descriptors_path=args.separate_test_atom_descriptors_path,
-                             bond_features_path=args.separate_test_bond_features_path,
+                             node_descriptors_path=args.separate_test_node_descriptors_path,
+                             edge_features_path=args.separate_test_edge_features_path,
                              phase_features_path=args.separate_test_phase_features_path,
-                             smiles_columns=args.smiles_columns,
+                             graphs_columns=args.graphs_columns,
                              loss_function=args.loss_function,
                              logger=logger)
     if args.separate_val_path:
         val_data = get_data(path=args.separate_val_path,
                             args=args,
                             features_path=args.separate_val_features_path,
-                            atom_descriptors_path=args.separate_val_atom_descriptors_path,
-                            bond_features_path=args.separate_val_bond_features_path,
+                            node_descriptors_path=args.separate_val_node_descriptors_path,
+                            edge_features_path=args.separate_val_edge_features_path,
                             phase_features_path=args.separate_val_phase_features_path,
-                            smiles_columns = args.smiles_columns,
+                            graphs_columns = args.graphs_columns,
                             loss_function=args.loss_function,
                             logger=logger)
 
@@ -106,17 +106,7 @@ def run_training(args: TrainArgs,
         args.train_class_sizes = train_class_sizes
 
     if args.save_smiles_splits:
-        save_smiles_splits(
-            data_path=args.data_path,
-            save_dir=args.save_dir,
-            task_names=args.task_names,
-            features_path=args.features_path,
-            train_data=train_data,
-            val_data=val_data,
-            test_data=test_data,
-            smiles_columns=args.smiles_columns,
-            logger=logger,
-        )
+        print("TODO: save graph")
 
     if args.features_scaling:
         features_scaler = train_data.normalize_features(replace_nan_token=0)
@@ -125,19 +115,19 @@ def run_training(args: TrainArgs,
     else:
         features_scaler = None
 
-    if args.atom_descriptor_scaling and args.atom_descriptors is not None:
-        atom_descriptor_scaler = train_data.normalize_features(replace_nan_token=0, scale_atom_descriptors=True)
-        val_data.normalize_features(atom_descriptor_scaler, scale_atom_descriptors=True)
-        test_data.normalize_features(atom_descriptor_scaler, scale_atom_descriptors=True)
+    if args.node_descriptor_scaling and args.node_descriptors is not None:
+        node_descriptor_scaler = train_data.normalize_features(replace_nan_token=0, scale_node_descriptors=True)
+        val_data.normalize_features(node_descriptor_scaler, scale_node_descriptors=True)
+        test_data.normalize_features(node_descriptor_scaler, scale_node_descriptors=True)
     else:
-        atom_descriptor_scaler = None
+        node_descriptor_scaler = None
 
-    if args.bond_feature_scaling and args.bond_features_size > 0:
-        bond_feature_scaler = train_data.normalize_features(replace_nan_token=0, scale_bond_features=True)
-        val_data.normalize_features(bond_feature_scaler, scale_bond_features=True)
-        test_data.normalize_features(bond_feature_scaler, scale_bond_features=True)
+    if args.edge_feature_scaling and args.edge_features_size > 0:
+        edge_feature_scaler = train_data.normalize_features(replace_nan_token=0, scale_edge_features=True)
+        val_data.normalize_features(edge_feature_scaler, scale_edge_features=True)
+        test_data.normalize_features(edge_feature_scaler, scale_edge_features=True)
     else:
-        bond_feature_scaler = None
+        edge_feature_scaler = None
 
     args.train_data_size = len(train_data)
 
@@ -184,11 +174,11 @@ def run_training(args: TrainArgs,
     loss_func = get_loss_func(args)
 
     # Set up test set evaluation
-    test_smiles, test_targets = test_data.smiles(), test_data.targets()
+    test_graphs, test_targets = test_data.graphs(), test_data.targets()
     if args.dataset_type == 'multiclass':
-        sum_test_preds = np.zeros((len(test_smiles), args.num_tasks, args.multiclass_num_classes))
+        sum_test_preds = np.zeros((len(test_graphs), args.num_tasks, args.multiclass_num_classes))
     else:
-        sum_test_preds = np.zeros((len(test_smiles), args.num_tasks))
+        sum_test_preds = np.zeros((len(test_graphs), args.num_tasks))
 
     num_workers = args.num_workers
 
@@ -252,7 +242,7 @@ def run_training(args: TrainArgs,
 
         # Ensure that model is saved in correct location for evaluation if 0 epochs
         save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler,
-                        features_scaler, atom_descriptor_scaler, bond_feature_scaler, args)
+                        features_scaler, node_descriptor_scaler, edge_feature_scaler, args)
 
         # Optimizers
         optimizer = build_optimizer(model, args)
@@ -306,7 +296,7 @@ def run_training(args: TrainArgs,
                     not args.minimize_score and mean_val_score > best_score:
                 best_score, best_epoch = mean_val_score, epoch
                 save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler, features_scaler,
-                                atom_descriptor_scaler, bond_feature_scaler, args)
+                                node_descriptor_scaler, edge_feature_scaler, args)
 
         # Evaluate on test set using model with best validation score
         info(f'Model {model_idx} best validation {args.metric} = {best_score:.6f} on epoch {best_epoch}')
@@ -382,7 +372,7 @@ def run_training(args: TrainArgs,
 
     # Optionally save test preds
     if args.save_preds and not empty_test_set:
-        test_preds_dataframe = pd.DataFrame(data={'smiles': test_data.smiles()})
+        test_preds_dataframe = pd.DataFrame(data={'graphs': test_data.graphs()})
 
         for i, task_name in enumerate(args.task_names):
             test_preds_dataframe[task_name] = [pred[i] for pred in avg_test_preds]

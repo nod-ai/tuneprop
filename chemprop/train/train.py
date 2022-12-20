@@ -45,9 +45,9 @@ def train(model: ComputeGraphModel,
     for batch in tqdm(data_loader, total=len(data_loader), leave=False):
         # Prepare batch
         batch: ComputeGraphDataset
-        mol_batch, features_batch, target_batch, mask_batch, atom_descriptors_batch, atom_features_batch, bond_features_batch, data_weights_batch = \
-            batch.batch_graph(), batch.features(), batch.targets(), batch.mask(), batch.atom_descriptors(), \
-            batch.atom_features(), batch.bond_features(), batch.data_weights()
+        mol_batch, features_batch, target_batch, mask_batch, node_descriptors_batch, node_features_batch, edge_features_batch, data_weights_batch = \
+            batch.batch_graph(), batch.features(), batch.targets(), batch.mask(), batch.node_descriptors(), \
+            batch.node_features(), batch.edge_features(), batch.data_weights()
 
         mask = torch.tensor(mask_batch, dtype=torch.bool) # shape(batch, tasks)
         targets = torch.tensor([[0 if x is None else x for x in tb] for tb in target_batch]) # shape(batch, tasks)
@@ -66,7 +66,7 @@ def train(model: ComputeGraphModel,
 
         # Run model
         model.zero_grad()
-        preds = model(mol_batch, features_batch, atom_descriptors_batch, atom_features_batch, bond_features_batch)
+        preds = model(mol_batch, features_batch, node_descriptors_batch, node_features_batch, edge_features_batch)
 
         # Move tensors to correct device
         torch_device = preds.device

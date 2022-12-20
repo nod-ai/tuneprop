@@ -10,7 +10,7 @@ from chemprop.args import TrainArgs
 from chemprop.features import BatchComputeGraph
 from chemprop.nn_utils import get_activation_function, initialize_weights
 
-from nodalpa.computational_graph import ComputationalGraph
+from chemprop.features.computational_graph.computational_graph import ComputationalGraph
 
 
 class ComputeGraphModel(nn.Module):
@@ -85,15 +85,12 @@ class ComputeGraphModel(nn.Module):
         if args.features_only:
             first_linear_dim = args.features_size
         else:
-            if args.reaction_solvent:
-                first_linear_dim = args.hidden_size + args.hidden_size_solvent
-            else:
-                first_linear_dim = args.hidden_size * args.number_of_molecules
+            first_linear_dim = args.hidden_size * args.number_of_molecules
             if args.use_input_features:
                 first_linear_dim += args.features_size
 
-        if args.atom_descriptors == 'descriptor':
-            first_linear_dim += args.atom_descriptors_size
+        if args.node_descriptors == 'descriptor':
+            first_linear_dim += args.node_descriptors_size
 
         dropout = nn.Dropout(args.dropout)
         activation = get_activation_function(args.activation)
@@ -147,9 +144,9 @@ class ComputeGraphModel(nn.Module):
     def fingerprint(self,
                     batch: Union[List[List[str]], List[List[ComputationalGraph]], List[BatchComputeGraph]],
                     features_batch: List[np.ndarray] = None,
-                    atom_descriptors_batch: List[np.ndarray] = None,
-                    atom_features_batch: List[np.ndarray] = None,
-                    bond_features_batch: List[np.ndarray] = None,
+                    node_descriptors_batch: List[np.ndarray] = None,
+                    node_features_batch: List[np.ndarray] = None,
+                    edge_features_batch: List[np.ndarray] = None,
                     fingerprint_type: str = 'MPNN') -> torch.Tensor:
         """
         Encodes the latent representations of the input molecules from intermediate stages of the model.
@@ -158,26 +155,26 @@ class ComputeGraphModel(nn.Module):
                       The outer list or BatchMolGraph is of length :code:`num_molecules` (number of datapoints in batch),
                       the inner list is of length :code:`number_of_molecules` (number of molecules per datapoint).
         :param features_batch: A list of numpy arrays containing additional features.
-        :param atom_descriptors_batch: A list of numpy arrays containing additional atom descriptors.
+        :param node_descriptors_batch: A list of numpy arrays containing additional node descriptors.
         :param fingerprint_type: The choice of which type of latent representation to return as the molecular fingerprint. Currently
                                  supported MPNN for the output of the MPNNN portion of the model or last_FFN for the input to the final readout layer.
         :return: The latent fingerprint vectors.
         """
         if fingerprint_type == 'MPNN':
-            return self.encoder(batch, features_batch, atom_descriptors_batch,
-                                atom_features_batch, bond_features_batch)
+            return self.encoder(batch, features_batch, node_descriptors_batch,
+                                node_features_batch, edge_features_batch)
         elif fingerprint_type == 'last_FFN':
-            return self.ffn[:-1](self.encoder(batch, features_batch, atom_descriptors_batch,
-                                              atom_features_batch, bond_features_batch))
+            return self.ffn[:-1](self.encoder(batch, features_batch, node_descriptors_batch,
+                                              node_features_batch, edge_features_batch))
         else:
             raise ValueError(f'Unsupported fingerprint type {fingerprint_type}.')
 
     def forward(self,
                 batch: Union[List[List[str]], List[List[ComputationalGraph]], List[BatchComputeGraph]],
                 features_batch: List[np.ndarray] = None,
-                atom_descriptors_batch: List[np.ndarray] = None,
-                atom_features_batch: List[np.ndarray] = None,
-                bond_features_batch: List[np.ndarray] = None) -> torch.FloatTensor:
+                node_descriptors_batch: List[np.ndarray] = None,
+                node_features_batch: List[np.ndarray] = None,
+                edge_features_batch: List[np.ndarray] = None) -> torch.FloatTensor:
         """
         Runs the :class:`MoleculeModel` on input.
         :param batch: A list of list of SMILES, a list of list of RDKit molecules, or a
@@ -185,14 +182,14 @@ class ComputeGraphModel(nn.Module):
                       The outer list or BatchMolGraph is of length :code:`num_molecules` (number of datapoints in batch),
                       the inner list is of length :code:`number_of_molecules` (number of molecules per datapoint).
         :param features_batch: A list of numpy arrays containing additional features.
-        :param atom_descriptors_batch: A list of numpy arrays containing additional atom descriptors.
-        :param atom_features_batch: A list of numpy arrays containing additional atom features.
-        :param bond_features_batch: A list of numpy arrays containing additional bond features.
+        :param node_descriptors_batch: A list of numpy arrays containing additional node descriptors.
+        :param node_features_batch: A list of numpy arrays containing additional node features.
+        :param edge_features_batch: A list of numpy arrays containing additional edge features.
         :return: The output of the :class:`MoleculeModel`, containing a list of property predictions
         """
 
-        output = self.ffn(self.encoder(batch, features_batch, atom_descriptors_batch,
-                                       atom_features_batch, bond_features_batch))
+        output = self.ffn(self.encoder(batch, features_batch, node_descriptors_batch,
+                                       node_features_batch, edge_features_batch))
 
         if self.classification and not (self.training and self.no_training_normalization) and self.loss_function != 'dirichlet':
             output = self.sigmoid(output)

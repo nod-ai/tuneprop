@@ -74,9 +74,9 @@ def cross_validate(args: TrainArgs,
     validate_dataset_type(data, dataset_type=args.dataset_type)
     args.features_size = data.features_size()
 
-    if args.atom_descriptors == 'descriptor':
-        args.atom_descriptors_size = data.atom_descriptors_size()
-        args.ffn_hidden_size += args.atom_descriptors_size
+    if args.node_descriptors == 'descriptor':
+        args.node_descriptors_size = data.node_descriptors_size()
+        args.ffn_hidden_size += args.node_descriptors_size
 
     debug(f'Number of tasks = {args.num_tasks}')
 

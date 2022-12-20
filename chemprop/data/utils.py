@@ -333,15 +333,15 @@ def get_data(path: str,
 
         data = ComputeGraphDataset([
             ComputeGraphDatapoint(
-                smiles=smiles,
+                graphs= [], # TODO(kyleherndon)
                 targets=targets,
                 row=all_rows[i] if store_row else None,
                 data_weight=all_weights[i] if data_weights is not None else None,
                 gt_targets=all_gt[i] if gt_targets is not None else None,
                 lt_targets=all_lt[i] if lt_targets is not None else None,
-                features_generator=features_generator,
+                # features_generator=features_generator,
                 features=all_features[i] if features_data is not None else None,
-                phase_features=all_phase_features[i] if phase_features is not None else None,
+                # phase_features=all_phase_features[i] if phase_features is not None else None,
                 node_features=node_features[i] if node_features is not None else None,
                 node_descriptors=node_descriptors[i] if node_descriptors is not None else None,
                 edge_features=edge_features[i] if edge_features is not None else None,
@@ -350,14 +350,6 @@ def get_data(path: str,
             ) for i, (smiles, targets) in tqdm(enumerate(zip(all_smiles, all_targets)),
                                                total=len(all_smiles))
         ])
-
-    # Filter out invalid SMILES
-    if skip_invalid_smiles:
-        original_data_len = len(data)
-        data = filter_invalid_smiles(data)
-
-        if len(data) < original_data_len:
-            debug(f'Warning: {original_data_len - len(data)} SMILES are invalid.')
 
     return data
 

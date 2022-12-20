@@ -7,9 +7,9 @@ import torch.nn as nn
 
 from chemprop.args import TrainArgs
 from chemprop.features import BatchComputeGraph, get_node_fdim, get_edge_fdim, graphs2batch
-from chemprop.nn_utils import index_select_ND
+from chemprop.nn_utils import index_select_ND, get_activation_function
 
-from nodalpa.computational_graph import ComputationalGraph
+from chemprop.features.computational_graph.computational_graph import ComputationalGraph
 
 
 class MPNNEncoder(nn.Module):
@@ -19,8 +19,8 @@ class MPNNEncoder(nn.Module):
                  bias: bool = None, depth: int = None):
         """
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
-        :param node_fdim: Atom feature vector dimension.
-        :param edge_fdim: Bond feature vector dimension.
+        :param node_fdim: node feature vector dimension.
+        :param edge_fdim: edge feature vector dimension.
         :param hidden_size: Hidden layers dimension
         :param bias: Whether to add bias to linear layers
         :param depth: Number of message passing steps
@@ -29,7 +29,7 @@ class MPNNEncoder(nn.Module):
         self.node_fdim = node_fdim # opeartor_features: operation_id, shape_i...
         self.edge_fdim = edge_fdim #edge_features: null? index?
         self.node_messages = args.node_messages # centers messages on nodes
-        self.hidden_size = hidden_size or args.hidden_size #? = atoms?
+        self.hidden_size = hidden_size or args.hidden_size #? = nodes?
         self.bias = bias or args.bias #?
         self.depth = depth or args.depth # w/e
         self.dropout = args.dropout #?
@@ -72,12 +72,12 @@ class MPNNEncoder(nn.Module):
                 graph: BatchComputeGraph) -> torch.FloatTensor:
         """
         Encodes a batch of molecular graphs.
-        :param mol_graph: A :class:`~chemprop.features.featurization.BatchMolGraph` representing
+        :param graph: A :class:`~chemprop.features.featurization.BatchMolGraph` representing
                           a batch of molecular graphs.
         :return: A PyTorch tensor of shape :code:`(num_molecules, hidden_size)` containing the encoding of each molecule.
         """
 
-        f_nodes, f_edges, n2e, e2n, e2reversee, n_scope, e_scope = mol_graph.get_components(node_messages=self.node_messages)
+        f_nodes, f_edges, n2e, e2n, e2reversee, n_scope, e_scope = graph.get_components(node_messages=self.node_messages)
         f_nodes, f_edges, n2e, e2n, e2reversee = f_nodes.to(self.device), f_edges.to(self.device), n2e.to(self.device), e2n.to(self.device), e2reversee.to(self.device)
 
         if self.node_messages:
@@ -85,10 +85,10 @@ class MPNNEncoder(nn.Module):
 
         # Input
         if self.node_messages:
-            input = self.W_i(f_nodes)  # num_atoms x hidden_size
+            input = self.W_i(f_nodes)  # num_nodes x hidden_size
         else:
-            input = self.W_i(f_edges)  # num_bonds x hidden_size
-        message = self.act_func(input)  # num_bonds x hidden_size
+            input = self.W_i(f_edges)  # num_edges x hidden_size
+        message = self.act_func(input)  # num_edges x hidden_size
 
         # Message passing
         for depth in range(self.depth - 1):
@@ -97,40 +97,40 @@ class MPNNEncoder(nn.Module):
 
             if self.node_messages:
                 # m(v, t+1)
-                nei_n_message = index_select_ND(message, n2n)  # num_atoms x max_num_bonds x hidden
-                nei_f_edges = index_select_ND(f_edges, n2e)  # num_atoms x max_num_bonds x edge_fdim
-                nei_message = torch.cat((nei_n_message, nei_f_edges), dim=2)  # num_atoms x max_num_bonds x hidden + edge_fdim
-                message = nei_message.sum(dim=1)  # num_atoms x hidden + edge_fdim
+                nei_n_message = index_select_ND(message, n2n)  # num_nodes x max_num_edges x hidden
+                nei_f_edges = index_select_ND(f_edges, n2e)  # num_nodes x max_num_edges x edge_fdim
+                nei_message = torch.cat((nei_n_message, nei_f_edges), dim=2)  # num_nodes x max_num_edges x hidden + edge_fdim
+                message = nei_message.sum(dim=1)  # num_nodes x hidden + edge_fdim
             else:
                 # m(a1 -> a2) = [sum_{a0 \in nei(a1)} m(a0 -> a1)] - m(a2 -> a1)
                 # message      n_message = sum(nei_n_message)      rev_message
-                nei_n_message = index_select_ND(message, n2e)  # num_atoms x max_num_bonds x hidden
-                n_message = nei_n_message.sum(dim=1)  # num_atoms x hidden
-                rev_message = message[e2reversee]  # num_bonds x hidden
-                message = n_message[e2n] - rev_message  # num_bonds x hidden
+                nei_n_message = index_select_ND(message, n2e)  # num_nodes x max_num_edges x hidden
+                n_message = nei_n_message.sum(dim=1)  # num_nodes x hidden
+                rev_message = message[e2reversee]  # num_edges x hidden
+                message = n_message[e2n] - rev_message  # num_edges x hidden
 
             # U_t
             message = self.W_h(message)
-            message = self.act_func(input + message)  # num_bonds x hidden_size
-            message = self.dropout_layer(message)  # num_bonds x hidden
+            message = self.act_func(input + message)  # num_edges x hidden_size
+            message = self.dropout_layer(message)  # num_edges x hidden
 
         # One last step with dropout and a separate network layer
         n2x = n2n if self.node_messages else n2e
-        nei_n_message = index_select_ND(message, n2x)  # num_atoms x max_num_bonds x hidden
-        n_message = nei_n_message.sum(dim=1)  # num_atoms x hidden
-        a_input = torch.cat([f_nodes, n_message], dim=1)  # num_atoms x (node_fdim + hidden)
-        node_hiddens = self.act_func(self.W_o(a_input))  # num_atoms x hidden
-        node_hiddens = self.dropout_layer(node_hiddens)  # num_atoms x hidden
+        nei_n_message = index_select_ND(message, n2x)  # num_nodes x max_num_edges x hidden
+        n_message = nei_n_message.sum(dim=1)  # num_nodes x hidden
+        a_input = torch.cat([f_nodes, n_message], dim=1)  # num_nodes x (node_fdim + hidden)
+        node_hiddens = self.act_func(self.W_o(a_input))  # num_nodes x hidden
+        node_hiddens = self.dropout_layer(node_hiddens)  # num_nodes x hidden
 
-        # concatenate the atom descriptors
+        # concatenate the node descriptors
         # probably do not use, most equivalent would be having a separate file for op hidden values
         if node_descriptors_batch is not None:
             if len(node_hiddens) != len(node_descriptors_batch):
-                raise ValueError(f'The number of atoms is different from the length of the extra atom features')
+                raise ValueError(f'The number of nodes is different from the length of the extra node features')
 
-            node_hiddens = torch.cat([node_hiddens, node_descriptors_batch], dim=1)     # num_atoms x (hidden + descriptor size)
-            node_hiddens = self.node_descriptors_layer(node_hiddens)                    # num_atoms x (hidden + descriptor size)
-            node_hiddens = self.dropout_layer(node_hiddens)                             # num_atoms x (hidden + descriptor size)
+            node_hiddens = torch.cat([node_hiddens, node_descriptors_batch], dim=1)     # num_nodes x (hidden + descriptor size)
+            node_hiddens = self.node_descriptors_layer(node_hiddens)                    # num_nodes x (hidden + descriptor size)
+            node_hiddens = self.dropout_layer(node_hiddens)                             # num_nodes x (hidden + descriptor size)
 
         # Readout
         hidden_vecs = []
@@ -139,7 +139,7 @@ class MPNNEncoder(nn.Module):
                 hidden_vecs.append(self.cached_zero_vector)
             else:
                 cur_hiddens = node_hiddens.narrow(0, n_start, n_size)
-                hidden_vec = cur_hiddens  # (num_atoms, hidden_size)
+                hidden_vec = cur_hiddens  # (num_nodes, hidden_size)
                 if self.aggregation == 'mean':
                     hidden_vec = hidden_vec.sum(dim=0) / n_size
                 elif self.aggregation == 'sum':
@@ -162,18 +162,12 @@ class MPNN(nn.Module):
                  edge_fdim: int = None):
         """
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
-        :param node_fdim: Atom feature vector dimension.
-        :param edge_fdim: Bond feature vector dimension.
+        :param node_fdim: node feature vector dimension.
+        :param edge_fdim: edge feature vector dimension.
         """
         super(MPNN, self).__init__()
-        self.reaction = args.reaction
-        self.reaction_solvent = args.reaction_solvent
-        self.node_fdim = node_fdim or get_node_fdim(overwrite_default_atom=args.overwrite_default_node_features,
-                                                     is_reaction=(self.reaction or self.reaction_solvent))
-        self.edge_fdim = edge_fdim or get_edge_fdim(overwrite_default_atom=args.overwrite_default_node_features,
-                                                    overwrite_default_bond=args.overwrite_default_edge_features,
-                                                    node_messages=args.node_messages,
-                                                    is_reaction=(self.reaction or self.reaction_solvent))
+        self.node_fdim = node_fdim or get_node_fdim()
+        self.edge_fdim = edge_fdim or get_edge_fdim(node_messages=args.node_messages)
         self.features_only = args.features_only
         self.use_input_features = args.use_input_features
         self.device = args.device
@@ -184,25 +178,16 @@ class MPNN(nn.Module):
         if self.features_only:
             return
 
-        if not self.reaction_solvent:
-            if args.MPNN_shared:
-                self.encoder = nn.ModuleList([MPNNEncoder(args, self.node_fdim, self.edge_fdim)] * args.number_of_molecules)
-            else:
-                self.encoder = nn.ModuleList([MPNNEncoder(args, self.node_fdim, self.edge_fdim)
-                                               for _ in range(args.number_of_molecules)])
-        else:
-            self.encoder = MPNNEncoder(args, self.node_fdim, self.edge_fdim)
-            # Set separate node_fdim and edge_fdim for solvent molecules
-            self.node_fdim_solvent = get_node_fdim(overwrite_default_atom=args.overwrite_default_node_features,
-                                                   is_reaction=False)
-            self.edge_fdim_solvent = get_edge_fdim(overwrite_default_atom=args.overwrite_default_node_features,
-                                                   overwrite_default_bond=args.overwrite_default_edge_features,
-                                                   node_messages=args.node_messages,
-                                                   is_reaction=False)
-            self.encoder_solvent = MPNNEncoder(args, self.node_fdim_solvent, self.edge_fdim_solvent,
-                                               args.hidden_size_solvent, args.bias_solvent, args.depth_solvent)
+        self.encoder = MPNNEncoder(args, self.node_fdim, self.edge_fdim)
+        # Set separate node_fdim and edge_fdim for solvent molecules
+        self.node_fdim_solvent = get_node_fdim()
+        self.edge_fdim_solvent = get_edge_fdim(node_messages=args.node_messages)
 
-    def forward(self, batch: List[List[ComputationalGraph]]) -> torch.FloatTensor:
+    def forward(self, batch: List[List[ComputationalGraph]],
+                    features_batch: List[np.ndarray] = None,
+                    atom_descriptors_batch: List[np.ndarray] = None,
+                    atom_features_batch: List[np.ndarray] = None,
+                    bond_features_batch: List[np.ndarray] = None) -> torch.FloatTensor:
         """
         Encodes a batch of molecules.
         :param batch: A list of list of SMILES, a list of list of RDKit molecules, or a
@@ -218,7 +203,7 @@ class MPNN(nn.Module):
             # TODO: handle node_descriptors_batch with multiple molecules per input
             if self.node_descriptors == 'feature':
                 if len(batch) > 1:
-                    raise NotImplementedError('Atom/bond descriptors are currently only supported with one molecule '
+                    raise NotImplementedError('node/edge descriptors are currently only supported with one molecule '
                                               'per input (i.e., number_of_molecules = 1).')
 
                 batch = [
@@ -241,20 +226,12 @@ class MPNN(nn.Module):
 
         if self.node_descriptors == 'descriptor':
             if len(batch) > 1:
-                raise NotImplementedError('Atom descriptors are currently only supported with one molecule '
+                raise NotImplementedError('node descriptors are currently only supported with one molecule '
                                           'per input (i.e., number_of_molecules = 1).')
 
             encodings = [enc(ba, node_descriptors_batch) for enc, ba in zip(self.encoder, batch)]
         else:
-            if not self.reaction_solvent:
-                 encodings = [enc(ba) for enc, ba in zip(self.encoder, batch)]
-            else:
-                 encodings = []
-                 for ba in batch:
-                     if ba.is_reaction:
-                         encodings.append(self.encoder(ba))
-                     else:
-                         encodings.append(self.encoder_solvent(ba))
+            encodings = [enc(ba) for enc, ba in zip(self.encoder, batch)]
 
         output = reduce(lambda x, y: torch.cat((x, y), dim=1), encodings)
 
